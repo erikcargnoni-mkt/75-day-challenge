@@ -8,8 +8,9 @@ have flat capacity across 28 days, and pretending otherwise produces a program t
 physiology.
 
 So this app splits the two. The **streak** never bends. What bends is the **definition of done** for
-the two pillars where capacity actually changes: training intensity and hydration. Walk, reading and
-nutrition are identical in every phase, on purpose — the challenge needs a spine.
+the two pillars where capacity actually changes: training intensity and hydration. Outdoor time,
+nutrition, reading, meditation and the photo are identical in every phase, on purpose — the challenge
+needs a spine.
 
 ## The daily rules
 
