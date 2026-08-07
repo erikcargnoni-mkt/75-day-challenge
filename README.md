@@ -41,7 +41,15 @@ the near-constant part of a cycle (~14 days). Cycle length is the median of her 
 intervals, falling back to the configured default until there are at least two. These are estimates.
 The app does not detect ovulation and does not track fertility.
 
-## Running it
+## Live
+
+**https://erikcargnoni-mkt.github.io/75-day-challenge/**
+
+Open it on a phone → Share → Add to Home Screen. It installs, works offline, and keeps its data on
+that device. Every push to `main` rebuilds and redeploys via GitHub Actions; the workflow runs the
+test suite first, so a broken rules engine can't ship.
+
+## Running it locally
 
 ```bash
 npm install
