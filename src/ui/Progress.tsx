@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { dayStatus, dateForDayIndex } from '../core/challenge';
 import { PHASE_LABEL, phaseFor } from '../core/cycle';
 import { formatShort, type ISODate } from '../core/date';
-import { bandFitMessage, overview, phaseStats } from '../core/insights';
+import { bandFitMessage, overview, phaseStats, weightTrend } from '../core/insights';
 import { getPhoto, listPhotoDates } from '../core/photos';
 import { CHALLENGE_LENGTH } from '../core/types';
 import { useApp } from '../state/useApp';
 import { Card, num, pct, phaseColor } from './bits';
+import { WeightChart } from './WeightChart';
 
 export function Progress() {
   const { state, today } = useApp();
@@ -40,6 +41,9 @@ export function Progress() {
         </>
       )}
 
+      <h2>Weight</h2>
+      <WeightSection />
+
       <h2>By phase</h2>
       <Card>
         {ov.totalDaysLogged === 0 ? (
@@ -56,6 +60,7 @@ export function Progress() {
                   <th>Done</th>
                   <th>Downshift</th>
                   <th>Energy</th>
+                  <th>Weight</th>
                   <th>Water</th>
                 </tr>
               </thead>
@@ -75,6 +80,7 @@ export function Progress() {
                     <td className="mono">{s.days ? `${s.completeDays}/${s.days}` : '—'}</td>
                     <td className="mono">{pct(s.downshiftRate)}</td>
                     <td className="mono">{num(s.avgEnergy)}</td>
+                    <td className="mono">{s.avgWeight === null ? '—' : `${s.avgWeight.toFixed(1)}`}</td>
                     <td className="mono">{pct(s.waterAdherence)}</td>
                   </tr>
                 ))}
@@ -124,6 +130,54 @@ export function Progress() {
         Today is {formatShort(today)}.
       </p>
     </div>
+  );
+}
+
+function WeightSection() {
+  const { state } = useApp();
+  const trend = weightTrend(state);
+
+  if (trend.points.length < 2) {
+    return (
+      <Card>
+        <p className="small muted" style={{ marginBottom: 0 }}>
+          Log your weight on the Today screen for a couple of days and the trend appears here.
+        </p>
+      </Card>
+    );
+  }
+
+  const enoughForAverage = trend.change !== null;
+
+  return (
+    <Card>
+      <div className="row between" style={{ marginBottom: 10 }}>
+        <div className="col">
+          <span className="mono" style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.1 }}>
+            {trend.latest?.toFixed(1)} kg
+          </span>
+          <span className="tiny muted">Latest reading</span>
+        </div>
+        <div className="col" style={{ alignItems: 'flex-end' }}>
+          <span className="mono" style={{ fontSize: 18, fontWeight: 700 }}>
+            {enoughForAverage
+              ? `${trend.change! >= 0 ? '+' : ''}${trend.change!.toFixed(1)} kg`
+              : '—'}
+          </span>
+          <span className="tiny muted">
+            {enoughForAverage ? 'Change on the average' : 'Needs 7 days'}
+          </span>
+        </div>
+      </div>
+
+      <WeightChart trend={trend} />
+
+      <p className="hint" style={{ marginBottom: 0 }}>
+        The bold line is the 7-day average — that is the one to read. Single mornings move on salt,
+        sleep and fluid, and the shaded bands show which phase each reading fell in: a rise across the
+        luteal band is usually water, not fat.
+      </p>
+    </Card>
   );
 }
 

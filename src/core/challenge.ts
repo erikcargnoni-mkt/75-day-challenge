@@ -1,6 +1,6 @@
 import { phaseFor } from './cycle';
 import { addDays, daysBetween, type ISODate } from './date';
-import { isDownshift, isPhotoDay, targetsFor, type DayTargets } from './targets';
+import { isDownshift, targetsFor, type DayTargets } from './targets';
 import {
   CHALLENGE_LENGTH,
   SCHEMA_VERSION,
@@ -9,6 +9,8 @@ import {
   type Attempt,
   type DayLog,
   type IntensityBand,
+  type MeditationMinutes,
+  type OutdoorMode,
   type Profile,
   type Symptoms,
   type TaskId,
@@ -58,42 +60,98 @@ export function blankLog(date: ISODate, dayIndex: number): DayLog {
   return { date, dayIndex, water: 0 };
 }
 
+/** Every weigh-in across every attempt, oldest first. */
+export function weightSeries(state: AppState): { date: ISODate; kg: number }[] {
+  const attempts = state.current ? [...state.history, state.current] : state.history;
+  return attempts
+    .flatMap((a) => Object.values(a.days))
+    .filter((l): l is DayLog & { weightKg: number } => l.weightKg !== undefined)
+    .map((l) => ({ date: l.date, kg: l.weightKg }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export function logFor(attempt: Attempt, date: ISODate): DayLog {
   return attempt.days[date] ?? blankLog(date, dayIndexFor(attempt, date));
 }
 
-export function requiredTasks(dayIndex: number): TaskId[] {
-  const base: TaskId[] = ['workout', 'walk', 'water', 'nutrition', 'reading'];
-  return isPhotoDay(dayIndex) ? [...base, 'photo'] : base;
+/**
+ * The daily set. Weight is deliberately absent: it is measured, not scored.
+ * Forgetting the scale should not cost seventy-five days of work.
+ */
+export const REQUIRED_TASKS: TaskId[] = [
+  'workout',
+  'outdoor',
+  'water',
+  'nutrition',
+  'reading',
+  'meditation',
+  'photo',
+];
+
+export function requiredTasks(): TaskId[] {
+  return REQUIRED_TASKS;
 }
 
-export function targetsForDate(state: AppState, date: ISODate, dayIndex: number): DayTargets {
-  return targetsFor(state.profile, phaseFor(date, state.cycle, state.profile), dayIndex);
+/**
+ * The weight the day's water target is scaled from: her most recent weigh-in on
+ * or before that date, falling back to the profile figure from setup.
+ */
+export function weightOn(state: AppState, date: ISODate): number {
+  const attempts = state.current ? [...state.history, state.current] : state.history;
+  let best: { date: ISODate; kg: number } | null = null;
+  for (const attempt of attempts) {
+    for (const log of Object.values(attempt.days)) {
+      if (log.weightKg === undefined || log.date > date) continue;
+      if (!best || log.date > best.date) best = { date: log.date, kg: log.weightKg };
+    }
+  }
+  return best?.kg ?? state.profile.weightKg;
+}
+
+export function targetsForDate(state: AppState, date: ISODate): DayTargets {
+  return targetsFor(state.profile, phaseFor(date, state.cycle, state.profile), weightOn(state, date));
 }
 
 export function isTaskDone(log: DayLog, task: TaskId, targets: DayTargets): boolean {
   switch (task) {
     case 'workout':
       return log.workout?.done === true;
-    case 'walk':
-      return log.walk === true;
+    case 'outdoor':
+      return log.outdoor?.done === true;
     case 'water':
       return (log.water ?? 0) >= targets.waterMl;
     case 'nutrition':
       return log.nutrition === true;
     case 'reading':
       return log.reading === true;
+    case 'meditation':
+      return log.meditation?.done === true;
     case 'photo':
       return log.photo === true;
   }
 }
 
 export function missingTasks(log: DayLog, targets: DayTargets): TaskId[] {
-  return requiredTasks(log.dayIndex).filter((t) => !isTaskDone(log, t, targets));
+  return requiredTasks().filter((t) => !isTaskDone(log, t, targets));
 }
 
-export function isDayComplete(log: DayLog, targets: DayTargets): boolean {
+/** Does this log satisfy the rules *as they stand right now*? */
+export function meetsRequirements(log: DayLog, targets: DayTargets): boolean {
   return missingTasks(log, targets).length === 0;
+}
+
+/**
+ * Whether a day counts as done.
+ *
+ * A day that was already signed off stays signed off, even if the rules later
+ * grow. Without this, adding a task would make every past day retroactively
+ * incomplete and reconcile() would reset a legitimate streak to day 1 on the
+ * next launch — punishing her for a change she did not make. `completedAt` is
+ * cleared whenever a task is un-ticked, so this can only ever grandfather a day
+ * that genuinely met the rules in force at the time.
+ */
+export function isDayComplete(log: DayLog, targets: DayTargets): boolean {
+  return log.completedAt !== undefined || meetsRequirements(log, targets);
 }
 
 export interface DayStatus {
@@ -109,8 +167,8 @@ export interface DayStatus {
 export function dayStatus(state: AppState, attempt: Attempt, date: ISODate): DayStatus {
   const dayIndex = dayIndexFor(attempt, date);
   const log = logFor(attempt, date);
-  const targets = targetsForDate(state, date, dayIndex);
-  const required = requiredTasks(dayIndex);
+  const targets = targetsForDate(state, date);
+  const required = requiredTasks();
   const missing = required.filter((t) => !isTaskDone(log, t, targets));
   return {
     date,
@@ -119,7 +177,7 @@ export function dayStatus(state: AppState, attempt: Attempt, date: ISODate): Day
     targets,
     done: required.filter((t) => !missing.includes(t)),
     missing,
-    complete: missing.length === 0,
+    complete: isDayComplete(log, targets),
   };
 }
 
@@ -195,7 +253,9 @@ function withLog(state: AppState, date: ISODate, mutate: (log: DayLog) => DayLog
   if (dayIndex < 1 || dayIndex > CHALLENGE_LENGTH) return state;
 
   const next = mutate(logFor(attempt, date));
-  const complete = isDayComplete(next, targetsForDate(state, date, dayIndex));
+  // Deliberately the strict check, not isDayComplete: sign-off has to be earned
+  // against today's rules before it can be grandfathered against tomorrow's.
+  const complete = meetsRequirements(next, targetsForDate(state, date));
 
   // Un-checking a task can walk the day back out of "done", so reachedDay has to
   // be able to move down as well as up.
@@ -222,9 +282,37 @@ function withLog(state: AppState, date: ISODate, mutate: (log: DayLog) => DayLog
 export function toggleBoolTask(
   state: AppState,
   date: ISODate,
-  task: 'walk' | 'nutrition' | 'reading' | 'photo',
+  task: 'nutrition' | 'reading' | 'photo',
 ): AppState {
   return withLog(state, date, (log) => ({ ...log, [task]: !log[task] }));
+}
+
+export function setOutdoor(state: AppState, date: ISODate, mode: OutdoorMode): AppState {
+  return withLog(state, date, (log) => ({ ...log, outdoor: { done: true, mode } }));
+}
+
+export function clearOutdoor(state: AppState, date: ISODate): AppState {
+  return withLog(state, date, (log) => ({ ...log, outdoor: undefined }));
+}
+
+export function setMeditation(
+  state: AppState,
+  date: ISODate,
+  minutes: MeditationMinutes,
+): AppState {
+  return withLog(state, date, (log) => ({ ...log, meditation: { done: true, minutes } }));
+}
+
+export function clearMeditation(state: AppState, date: ISODate): AppState {
+  return withLog(state, date, (log) => ({ ...log, meditation: undefined }));
+}
+
+/** Tracked, not scored — logging it never affects whether the day is complete. */
+export function setWeight(state: AppState, date: ISODate, kg: number | undefined): AppState {
+  return withLog(state, date, (log) => ({
+    ...log,
+    weightKg: kg === undefined || Number.isNaN(kg) || kg <= 0 ? undefined : kg,
+  }));
 }
 
 export function addWater(state: AppState, date: ISODate, ml: number): AppState {
@@ -243,8 +331,7 @@ export function completeWorkout(
 ): AppState {
   const attempt = state.current;
   if (!attempt) return state;
-  const dayIndex = dayIndexFor(attempt, date);
-  const prescribed = targetsForDate(state, date, dayIndex).workout.band;
+  const prescribed = targetsForDate(state, date).workout.band;
   return withLog(state, date, (log) => ({
     ...log,
     workout: { done: true, band, overridden: isDownshift(prescribed, band), note },

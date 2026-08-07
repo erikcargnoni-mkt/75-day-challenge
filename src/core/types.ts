@@ -1,7 +1,7 @@
 import type { ISODate } from './date';
 
 export const CHALLENGE_LENGTH = 75;
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export type Phase = 'menstrual' | 'follicular' | 'ovulatory' | 'luteal';
 
@@ -13,10 +13,25 @@ export type IntensityBand = 'restorative' | 'steady' | 'build' | 'peak';
 
 export const BAND_ORDER: IntensityBand[] = ['restorative', 'steady', 'build', 'peak'];
 
-export type TaskId = 'workout' | 'walk' | 'water' | 'nutrition' | 'reading' | 'photo';
+export type TaskId =
+  | 'workout'
+  | 'outdoor'
+  | 'water'
+  | 'nutrition'
+  | 'reading'
+  | 'meditation'
+  | 'photo';
+
+/** How the 30 outdoor minutes were spent. Both count equally. */
+export type OutdoorMode = 'walk' | 'run';
+
+export type MeditationMinutes = 5 | 10 | 15 | 20;
+export const MEDITATION_OPTIONS: MeditationMinutes[] = [5, 10, 15, 20];
+export const DEFAULT_MEDITATION: MeditationMinutes = 10;
 
 export interface Profile {
   name: string;
+  /** Starting weight. Superseded by the most recent daily weigh-in once she logs one. */
   weightKg: number;
   /** Used until enough real cycles are logged to compute a rolling average. */
   defaultCycleLength: number;
@@ -24,7 +39,7 @@ export interface Profile {
   /** Free text: the eating approach she committed to for the full 75 days. */
   nutritionPlan: string;
   readingPages: number;
-  walkMinutes: number;
+  outdoorMinutes: number;
   workoutMinutes: number;
 }
 
@@ -50,17 +65,35 @@ export interface WorkoutLog {
   note?: string;
 }
 
+export interface OutdoorLog {
+  done: boolean;
+  mode: OutdoorMode;
+}
+
+export interface MeditationLog {
+  done: boolean;
+  minutes: MeditationMinutes;
+}
+
 export interface DayLog {
   date: ISODate;
   dayIndex: number; // 1..75
   workout?: WorkoutLog;
-  walk?: boolean;
+  outdoor?: OutdoorLog;
   /** Millilitres logged so far. */
   water?: number;
   nutrition?: boolean;
   reading?: boolean;
+  meditation?: MeditationLog;
   photo?: boolean;
+  /** Morning weigh-in. Tracked, never required — see requiredTasks(). */
+  weightKg?: number;
   symptoms?: Symptoms;
+  /**
+   * Set the moment the day first satisfied the rules, and cleared if a task is
+   * un-ticked. Its presence is what makes a past day permanently signed off:
+   * see isDayComplete().
+   */
   completedAt?: string; // ISO timestamp
 }
 
@@ -104,6 +137,6 @@ export const DEFAULT_PROFILE: Profile = {
   periodLength: 5,
   nutritionPlan: '',
   readingPages: 10,
-  walkMinutes: 30,
+  outdoorMinutes: 30,
   workoutMinutes: 45,
 };

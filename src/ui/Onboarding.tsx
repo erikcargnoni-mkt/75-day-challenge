@@ -47,7 +47,10 @@ export function Onboarding() {
         <Field label="Name">
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Optional" />
         </Field>
-        <Field label="Bodyweight (kg)" hint="Sets your daily water target at roughly 35ml per kg.">
+        <Field
+          label="Bodyweight (kg)"
+          hint="Sets your water target at roughly 35ml per kg. Once you start logging daily weigh-ins, the target follows those instead."
+        >
           <input type="number" inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} />
         </Field>
       </Card>
@@ -87,9 +90,10 @@ export function Onboarding() {
 
       <Card>
         <p className="small muted" style={{ marginBottom: 0 }}>
-          Every day: one 45-minute workout at the prescribed intensity, a 30-minute walk outdoors, your
-          water target, your nutrition plan with zero exceptions, and 10 pages of non-fiction. A progress
-          photo on day 1 and every seventh day after.
+          Every day: one 45-minute workout at the prescribed intensity, 30 minutes outdoors walking or
+          running, your water target, your nutrition plan with zero exceptions, 10 pages of non-fiction,
+          a meditation sit, and a progress photo. Weight is logged daily too, but it never affects your
+          streak.
         </p>
       </Card>
 

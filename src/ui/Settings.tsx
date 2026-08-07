@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { abandonChallenge, initialState, updateProfile } from '../core/challenge';
+import { abandonChallenge, initialState, updateProfile, weightOn } from '../core/challenge';
 import { exportJSON, importJSON, localStore } from '../core/storage';
 import { waterTargetMl } from '../core/targets';
 import { phaseFor } from '../core/cycle';
@@ -42,8 +42,8 @@ export function Settings() {
           <input type="text" value={p.name} onChange={(e) => set({ name: e.target.value })} />
         </Field>
         <Field
-          label="Bodyweight (kg)"
-          hint={`Today's water target: ${ml(waterTargetMl(p, info))}`}
+          label="Starting bodyweight (kg)"
+          hint={`Today's water target: ${ml(waterTargetMl(weightOn(state, today), info))} — scaled from your most recent weigh-in.`}
         >
           <input
             type="number"
@@ -91,12 +91,12 @@ export function Settings() {
               onChange={(e) => set({ workoutMinutes: Number(e.target.value) })}
             />
           </Field>
-          <Field label="Walk (min)">
+          <Field label="Outdoors (min)">
             <input
               type="number"
               inputMode="numeric"
-              value={p.walkMinutes}
-              onChange={(e) => set({ walkMinutes: Number(e.target.value) })}
+              value={p.outdoorMinutes}
+              onChange={(e) => set({ outdoorMinutes: Number(e.target.value) })}
             />
           </Field>
           <Field label="Pages">

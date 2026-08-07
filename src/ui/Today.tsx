@@ -1,17 +1,31 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   addWater,
+  clearMeditation,
+  clearOutdoor,
   clearWorkout,
   completeWorkout,
   dayStatus,
+  setMeditation,
+  setOutdoor,
   setSymptoms,
+  setWeight,
   toggleBoolTask,
+  weightOn,
 } from '../core/challenge';
 import { PHASE_LABEL, phaseFor } from '../core/cycle';
 import { formatLong, type ISODate } from '../core/date';
 import { deletePhoto, getPhoto, savePhoto } from '../core/photos';
 import { BAND_LABEL, isDownshift } from '../core/targets';
-import { BAND_ORDER, CHALLENGE_LENGTH, type IntensityBand } from '../core/types';
+import {
+  BAND_ORDER,
+  CHALLENGE_LENGTH,
+  DEFAULT_MEDITATION,
+  MEDITATION_OPTIONS,
+  type IntensityBand,
+  type MeditationMinutes,
+  type OutdoorMode,
+} from '../core/types';
 import { useApp } from '../state/useApp';
 import { Card, Check, ml, Scale } from './bits';
 
@@ -70,12 +84,7 @@ export function Today() {
       <Card className="flush">
         <WorkoutTask />
 
-        <BoolTask
-          done={log.walk === true}
-          title={`${targets.walkMinutes} min outdoors`}
-          sub="Outside, whatever the weather. This one never scales."
-          onToggle={() => apply((s) => toggleBoolTask(s, today, 'walk'))}
-        />
+        <OutdoorTask />
 
         <div className="task">
           <Check
@@ -126,10 +135,14 @@ export function Today() {
           onToggle={() => apply((s) => toggleBoolTask(s, today, 'reading'))}
         />
 
-        {targets.photoDue && <PhotoTask date={today} done={log.photo === true} />}
+        <MeditationTask />
+
+        <PhotoTask date={today} done={log.photo === true} />
       </Card>
 
       <Remaining missing={status.missing.length} complete={status.complete} />
+
+      <WeighIn date={today} />
 
       <SymptomLog date={today} />
     </div>
@@ -231,6 +244,149 @@ function WorkoutTask() {
   );
 }
 
+const OUTDOOR_LABEL: Record<OutdoorMode, string> = { walk: 'Walk', run: 'Run' };
+
+/** Same shape as the workout: tick it, or pick how you did it and it ticks itself. */
+function OutdoorTask() {
+  const { state, apply, today } = useApp();
+  const { targets, log } = dayStatus(state, state.current!, today);
+  const done = log.outdoor?.done === true;
+
+  const pick = (mode: OutdoorMode) =>
+    apply((s) =>
+      done && log.outdoor?.mode === mode ? clearOutdoor(s, today) : setOutdoor(s, today, mode),
+    );
+
+  return (
+    <div className={`task${done ? ' done' : ''}`}>
+      <Check
+        on={done}
+        label="Outdoor time"
+        onClick={() => apply((s) => (done ? clearOutdoor(s, today) : setOutdoor(s, today, 'walk')))}
+      />
+      <div className="grow">
+        <div className="title">{targets.outdoorMinutes} min outdoors</div>
+        <div className="sub">Outside, whatever the weather. This one never scales.</div>
+        <div className="chips">
+          {(['walk', 'run'] as OutdoorMode[]).map((mode) => (
+            <button
+              key={mode}
+              className={`chip${done && log.outdoor?.mode === mode ? ' on' : ''}`}
+              onClick={() => pick(mode)}
+            >
+              {OUTDOOR_LABEL[mode]}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MeditationTask() {
+  const { state, apply, today } = useApp();
+  const { log } = dayStatus(state, state.current!, today);
+  const done = log.meditation?.done === true;
+
+  const pick = (minutes: MeditationMinutes) =>
+    apply((s) =>
+      done && log.meditation?.minutes === minutes
+        ? clearMeditation(s, today)
+        : setMeditation(s, today, minutes),
+    );
+
+  return (
+    <div className={`task${done ? ' done' : ''}`}>
+      <Check
+        on={done}
+        label="Meditation"
+        onClick={() =>
+          apply((s) =>
+            done ? clearMeditation(s, today) : setMeditation(s, today, DEFAULT_MEDITATION),
+          )
+        }
+      />
+      <div className="grow">
+        <div className="title">
+          Meditation{done && log.meditation ? ` · ${log.meditation.minutes} min` : ''}
+        </div>
+        <div className="sub">Sitting, breath, eyes closed. Any length on the list counts.</div>
+        <div className="chips">
+          {MEDITATION_OPTIONS.map((m) => (
+            <button
+              key={m}
+              className={`chip${done && log.meditation?.minutes === m ? ' on' : ''}`}
+              onClick={() => pick(m)}
+            >
+              {m} min
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Sits outside the checklist on purpose. Weight is measured, not scored —
+ * forgetting the scale must not cost the streak.
+ */
+function WeighIn({ date }: { date: ISODate }) {
+  const { state, apply } = useApp();
+  const log = state.current!.days[date];
+  const logged = log?.weightKg;
+  const [draft, setDraft] = useState('');
+  const previous = weightOn(state, date);
+
+  const save = () => {
+    const kg = Number(draft.replace(',', '.'));
+    if (kg > 0) apply((s) => setWeight(s, date, kg));
+    setDraft('');
+  };
+
+  return (
+    <Card>
+      <div className="row between" style={{ marginBottom: logged ? 0 : 10 }}>
+        <div className="col">
+          <span className="title">Morning weight</span>
+          <span className="sub">
+            {logged
+              ? `${logged.toFixed(1)} kg logged today`
+              : 'Optional, and it never affects your streak.'}
+          </span>
+        </div>
+        {logged ? (
+          <button className="btn sm ghost" onClick={() => apply((s) => setWeight(s, date, undefined))}>
+            Clear
+          </button>
+        ) : null}
+      </div>
+
+      {!logged && (
+        <>
+          <div className="row" style={{ gap: 8 }}>
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.1"
+              placeholder={previous.toFixed(1)}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && save()}
+            />
+            <button className="btn" disabled={!draft} onClick={save}>
+              Log
+            </button>
+          </div>
+          <p className="hint" style={{ marginBottom: 0 }}>
+            Same time each morning, before eating. Your water target follows this number.
+          </p>
+        </>
+      )}
+    </Card>
+  );
+}
+
 function PhotoTask({ date, done }: { date: ISODate; done: boolean }) {
   const { apply } = useApp();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -274,7 +430,7 @@ function PhotoTask({ date, done }: { date: ISODate; done: boolean }) {
       <Check on={done} label="Progress photo" onClick={() => (url ? remove() : inputRef.current?.click())} />
       <div className="grow">
         <div className="title">Progress photo</div>
-        <div className="sub">Weekly, not daily. Same light, same spot, same time of day.</div>
+        <div className="sub">Same light, same spot, same time of day. Stays on this device.</div>
         <input
           ref={inputRef}
           className="hidden-input"

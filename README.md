@@ -16,14 +16,22 @@ nutrition are identical in every phase, on purpose — the challenge needs a spi
 | Task | Requirement | Phase-relative? |
 |---|---|---|
 | Workout | 45 min at the prescribed intensity band | **Yes** |
-| Outdoor walk | 30 min outside, any weather | No |
+| Outdoors | 30 min outside, any weather — walk or run | No |
 | Water | ~35 ml/kg bodyweight, phase-adjusted | **Yes** |
 | Nutrition | Your written plan, no cheat meals, no alcohol | No |
 | Reading | 10 pages non-fiction | No |
-| Progress photo | Day 1, then every 7th day | Weekly, not daily |
+| Meditation | One sit — 5, 10, 15 or 20 min | No |
+| Progress photo | Daily | No |
 
 Miss any required task on any day and the attempt resets. Training *below* the prescribed band is
 allowed, recorded as a downshift, and does **not** break the streak. Skipping the workout does.
+
+Walk-or-run and meditation length are recorded, never scored — both options count equally.
+
+**Weight is measured, not scored.** A daily weigh-in is prompted and drives the water target, but
+forgetting the scale can never cost the streak. Its only other job is the trend on the Progress
+screen, which draws a trailing 7-day average rather than the raw mornings — a single reading moves
+on salt, sleep and luteal fluid, none of which is the thing she's changing.
 
 ## Intensity bands
 
@@ -54,7 +62,7 @@ test suite first, so a broken rules engine can't ship.
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm test         # 40 tests over the rules engine
+npm test         # 72 tests over the rules engine and chart geometry
 npm run build    # production PWA in dist/
 ```
 
@@ -85,6 +93,24 @@ State transitions are pure functions (`AppState → AppState`), so the reset log
 mounting anything. `reconcile()` is the one that matters: it's called on load, on focus, and every 30
 seconds, and it fails the attempt for any past day left incomplete — including days the app was never
 opened. The challenge does not pause because you looked away.
+
+### Rule changes must never reach backwards
+
+`reconcile()` re-judges every past day, so *adding* a required task would otherwise make yesterday
+retroactively incomplete and silently reset a legitimate streak to day 1. `isDayComplete()` therefore
+treats a day with a `completedAt` stamp as permanently signed off: it was judged against the rules in
+force when it was closed. `withLog()` sets that stamp only via the strict `meetsRequirements()` check
+and clears it the moment a task is un-ticked, so nothing can be grandfathered that didn't genuinely
+earn it. This is what made adding meditation and daily photos safe mid-challenge, and it's covered by
+tests in `challenge.test.ts` under *rule changes*.
+
+### The phase palette is computed, not chosen
+
+The four phase colours are a categorical palette carrying identity across badges, the calendar strip,
+the day grid and the weight chart. They're validated for lightness band, chroma floor, protan/deutan
+separation and surface contrast against both themes. Red and green sit far apart in lightness on
+purpose — under deuteranopia that gap is the only thing distinguishing them, and the obvious
+"brighter green" choice collapses their separation to ΔE 1.9. Don't nudge them by eye.
 
 ## Data
 

@@ -1,5 +1,6 @@
-import { dayStatus, targetsForDate } from './challenge';
+import { dayStatus, targetsForDate, weightSeries } from './challenge';
 import { phaseFor } from './cycle';
+import type { ISODate } from './date';
 import type { AppState, Attempt, DayLog, Phase } from './types';
 
 /**
@@ -21,6 +22,7 @@ export interface PhaseStat {
   avgMood: number | null;
   avgCramps: number | null;
   avgSleep: number | null;
+  avgWeight: number | null;
   waterAdherence: number | null;
 }
 
@@ -46,7 +48,7 @@ export function phaseStats(state: AppState, attempts: Attempt[]): PhaseStat[] {
       const bucket = buckets.get(info.phase)!;
       bucket.logs.push(log);
       if (dayStatus(state, attempt, log.date).complete) bucket.complete += 1;
-      const target = targetsForDate(state, log.date, log.dayIndex).waterMl;
+      const target = targetsForDate(state, log.date).waterMl;
       if (target > 0) bucket.waterRatio.push(Math.min(1, (log.water ?? 0) / target));
     }
   }
@@ -65,6 +67,7 @@ export function phaseStats(state: AppState, attempts: Attempt[]): PhaseStat[] {
       avgMood: mean(defined(b.logs.map((l) => l.symptoms?.mood))),
       avgCramps: mean(defined(b.logs.map((l) => l.symptoms?.cramps))),
       avgSleep: mean(defined(b.logs.map((l) => l.symptoms?.sleepHours))),
+      avgWeight: mean(defined(b.logs.map((l) => l.weightKg))),
       waterAdherence: mean(b.waterRatio),
     };
   });
@@ -88,6 +91,59 @@ export function overview(state: AppState): Overview {
     totalDaysLogged: logs.filter((l) => l.completedAt).length,
     totalWorkouts: workouts.length,
     downshifts: workouts.filter((w) => w?.overridden).length,
+  };
+}
+
+export interface WeightPoint {
+  date: ISODate;
+  kg: number;
+  /** Trailing 7-entry mean. Null until there are seven weigh-ins. */
+  avg: number | null;
+  phase: Phase | null;
+}
+
+export interface WeightTrend {
+  points: WeightPoint[];
+  first: number | null;
+  latest: number | null;
+  /** Change measured on the smoothed line, not on two noisy single mornings. */
+  change: number | null;
+  min: number;
+  max: number;
+}
+
+const AVG_WINDOW = 7;
+
+/**
+ * Daily weight is mostly noise — food, salt, sleep, and in the luteal phase
+ * several days of fluid retention that has nothing to do with fat. So the line
+ * the app draws is the trailing average, and the raw mornings sit behind it.
+ * Reading a single morning's number as progress is the mistake this is built to
+ * prevent.
+ */
+export function weightTrend(state: AppState): WeightTrend {
+  const raw = weightSeries(state);
+  const points: WeightPoint[] = raw.map((p, i) => {
+    const window = raw.slice(Math.max(0, i - AVG_WINDOW + 1), i + 1);
+    return {
+      date: p.date,
+      kg: p.kg,
+      avg: window.length === AVG_WINDOW ? window.reduce((a, b) => a + b.kg, 0) / AVG_WINDOW : null,
+      phase: phaseFor(p.date, state.cycle, state.profile)?.phase ?? null,
+    };
+  });
+
+  const smoothed = points.map((p) => p.avg).filter((n): n is number => n !== null);
+  const kgs = raw.map((p) => p.kg);
+
+  return {
+    points,
+    first: raw.length ? raw[0].kg : null,
+    latest: raw.length ? raw[raw.length - 1].kg : null,
+    change:
+      smoothed.length >= 2 ? smoothed[smoothed.length - 1] - smoothed[0] : null,
+    min: kgs.length ? Math.min(...kgs) : 0,
+    max: kgs.length ? Math.max(...kgs) : 0,
   };
 }
 

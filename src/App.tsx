@@ -15,10 +15,11 @@ type Tab = 'today' | 'cycle' | 'progress' | 'settings';
 
 const TASK_LABEL: Record<TaskId, string> = {
   workout: 'workout',
-  walk: 'outdoor walk',
+  outdoor: 'outdoor time',
   water: 'water',
   nutrition: 'nutrition',
   reading: 'reading',
+  meditation: 'meditation',
   photo: 'progress photo',
 };
 

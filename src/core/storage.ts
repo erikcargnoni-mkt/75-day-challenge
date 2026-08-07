@@ -45,14 +45,40 @@ export const localStore: StateStore = {
   },
 };
 
+/**
+ * v1 → v2: the single boolean `walk` became an `outdoor` log carrying walk-or-run,
+ * and `profile.walkMinutes` was renamed to match. Days already signed off keep
+ * their `completedAt`, which is what stops the newly added tasks (meditation, the
+ * now-daily photo) from retroactively invalidating them — see isDayComplete().
+ */
+function migrateV1toV2(state: Record<string, any>): void {
+  const profile = state.profile;
+  if (profile && profile.walkMinutes !== undefined) {
+    profile.outdoorMinutes = profile.walkMinutes;
+    delete profile.walkMinutes;
+  }
+  const attempts = [state.current, ...(state.history ?? [])].filter(Boolean);
+  for (const attempt of attempts) {
+    for (const log of Object.values(attempt.days ?? {}) as Record<string, any>[]) {
+      if (log.walk !== undefined) {
+        if (log.walk === true) log.outdoor = { done: true, mode: 'walk' };
+        delete log.walk;
+      }
+    }
+  }
+}
+
 function migrate(raw: unknown): AppState | null {
   if (!raw || typeof raw !== 'object') return null;
-  const state = raw as Partial<AppState>;
+  const state = structuredClone(raw) as Record<string, any>;
   if (!state.profile || !state.cycle) return null;
-  // Only one schema version so far; future versions branch here.
+
+  if ((state.schemaVersion ?? 1) < 2) migrateV1toV2(state);
+
   return {
     ...initialState(),
     ...state,
+    profile: { ...initialState().profile, ...state.profile },
     schemaVersion: SCHEMA_VERSION,
   } as AppState;
 }

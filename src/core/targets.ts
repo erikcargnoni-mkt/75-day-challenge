@@ -8,19 +8,17 @@ import { BAND_ORDER, type IntensityBand, type Profile } from './types';
  * The streak is rigid: every required task must be checked, every day, or the
  * challenge restarts at day 1. What moves is the *definition of done* for the
  * two pillars where physiology actually changes capacity — training intensity
- * and hydration. Walk, reading and nutrition are constants by design: the
- * challenge needs a spine that never bends.
+ * and hydration. Outdoor time, nutrition, reading, meditation and the photo are
+ * constants by design: the challenge needs a spine that never bends.
+ *
+ * Walk-or-run and meditation length are the user's call, not the app's. They are
+ * recorded because they are worth knowing later, not scored.
  */
 
 /** Baseline hydration, before phase adjustment. */
 const ML_PER_KG = 35;
 const WATER_FLOOR_ML = 1800;
 const WATER_CEILING_ML = 4000;
-
-/** Photo day: day 1, then every 7th day. */
-export function isPhotoDay(dayIndex: number): boolean {
-  return (dayIndex - 1) % 7 === 0;
-}
 
 export interface WorkoutTarget {
   minutes: number;
@@ -32,11 +30,10 @@ export interface WorkoutTarget {
 
 export interface DayTargets {
   workout: WorkoutTarget;
-  walkMinutes: number;
+  outdoorMinutes: number;
   waterMl: number;
   readingPages: number;
   nutritionPlan: string;
-  photoDue: boolean;
   /** Why today's targets look the way they do. Shown under the phase badge. */
   rationale: string;
 }
@@ -107,20 +104,21 @@ function waterMultiplier(info: PhaseInfo): number {
   }
 }
 
-export function waterTargetMl(profile: Profile, info: PhaseInfo | null): number {
-  const base = profile.weightKg * ML_PER_KG * (info ? waterMultiplier(info) : 1);
+/** Scaled from the most recent weigh-in, so the target tracks the body it is for. */
+export function waterTargetMl(weightKg: number, info: PhaseInfo | null): number {
+  const base = weightKg * ML_PER_KG * (info ? waterMultiplier(info) : 1);
   const rounded = Math.round(base / 50) * 50;
   return clamp(rounded, WATER_FLOOR_ML, WATER_CEILING_ML);
 }
 
 /**
- * Targets for a given challenge day. `info` is null when no period has been
- * logged yet — the app then falls back to neutral targets rather than guessing.
+ * Targets for a given day. `info` is null when no period has been logged yet —
+ * the app then falls back to neutral targets rather than guessing.
  */
 export function targetsFor(
   profile: Profile,
   info: PhaseInfo | null,
-  dayIndex: number,
+  weightKg: number,
 ): DayTargets {
   const b = info
     ? bandFor(info)
@@ -138,11 +136,10 @@ export function targetsFor(
       guidance: BAND_BLURB[b.band],
       caution: b.caution,
     },
-    walkMinutes: profile.walkMinutes,
-    waterMl: waterTargetMl(profile, info),
+    outdoorMinutes: profile.outdoorMinutes,
+    waterMl: waterTargetMl(weightKg, info),
     readingPages: profile.readingPages,
     nutritionPlan: profile.nutritionPlan,
-    photoDue: isPhotoDay(dayIndex),
     rationale: b.rationale,
   };
 }
