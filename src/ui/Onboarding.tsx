@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { logPeriodStart, startChallenge, updateProfile } from '../core/challenge';
 import { todayISO } from '../core/date';
 import { useApp } from '../state/useApp';
-import { Card, Field } from './bits';
+import { Card, DecimalInput, Field, parseDecimal } from './bits';
 
 /**
  * Setup. Deliberately short — five answers and she is on day 1. Everything
@@ -18,13 +18,14 @@ export function Onboarding() {
   const [lastPeriod, setLastPeriod] = useState<string>('');
   const [startDate, setStartDate] = useState<string>(today);
 
-  const ready = plan.trim().length > 0 && Number(weight) > 25;
+  const parsedWeight = parseDecimal(weight);
+  const ready = plan.trim().length > 0 && parsedWeight !== null && parsedWeight >= 25;
 
   const begin = () => {
     apply((s) => {
       let next = updateProfile(s, {
         name: name.trim(),
-        weightKg: Number(weight),
+        weightKg: parsedWeight ?? s.profile.weightKg,
         defaultCycleLength: Number(cycleLength),
         periodLength: Number(periodLength),
         nutritionPlan: plan.trim(),
@@ -51,7 +52,12 @@ export function Onboarding() {
           label="Bodyweight (kg)"
           hint="Sets your water target at roughly 35ml per kg. Once you start logging daily weigh-ins, the target follows those instead."
         >
-          <input type="number" inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} />
+          <DecimalInput
+            value={weight}
+            onChange={setWeight}
+            placeholder="60.0"
+            ariaLabel="Bodyweight in kilograms"
+          />
         </Field>
       </Card>
 

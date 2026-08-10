@@ -27,7 +27,7 @@ import {
   type OutdoorMode,
 } from '../core/types';
 import { useApp } from '../state/useApp';
-import { Card, Check, ml, Scale } from './bits';
+import { Card, Check, DecimalInput, ml, parseDecimal, Scale } from './bits';
 
 export function Today() {
   const { state, apply, today } = useApp();
@@ -328,6 +328,35 @@ function MeditationTask() {
 }
 
 /**
+ * Keeps its own text draft so a half-typed "7," survives, and commits upward
+ * only once the text parses. Clearing the field clears the stored value.
+ */
+function SleepInput({
+  value,
+  onChange,
+}: {
+  value: number | undefined;
+  onChange: (hours: number | undefined) => void;
+}) {
+  const [draft, setDraft] = useState(value === undefined ? '' : String(value));
+  return (
+    <DecimalInput
+      value={draft}
+      ariaLabel="Hours slept"
+      placeholder="7.5"
+      onChange={(text) => {
+        setDraft(text);
+        if (text === '') onChange(undefined);
+        else {
+          const n = parseDecimal(text);
+          if (n !== null && n <= 24) onChange(n);
+        }
+      }}
+    />
+  );
+}
+
+/**
  * Sits outside the checklist on purpose. Weight is measured, not scored —
  * forgetting the scale must not cost the streak.
  */
@@ -337,10 +366,14 @@ function WeighIn({ date }: { date: ISODate }) {
   const logged = log?.weightKg;
   const [draft, setDraft] = useState('');
   const previous = weightOn(state, date);
+  const parsed = parseDecimal(draft);
+  // A plausible-bodyweight guard, not a judgement — it only catches slips like a
+  // missing separator turning 75,4 into 754.
+  const valid = parsed !== null && parsed >= 25 && parsed <= 300;
 
   const save = () => {
-    const kg = Number(draft.replace(',', '.'));
-    if (kg > 0) apply((s) => setWeight(s, date, kg));
+    if (!valid) return;
+    apply((s) => setWeight(s, date, parsed));
     setDraft('');
   };
 
@@ -365,21 +398,21 @@ function WeighIn({ date }: { date: ISODate }) {
       {!logged && (
         <>
           <div className="row" style={{ gap: 8 }}>
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.1"
-              placeholder={previous.toFixed(1)}
+            <DecimalInput
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && save()}
+              onChange={setDraft}
+              onEnter={save}
+              placeholder={previous.toFixed(1)}
+              ariaLabel="Weight in kilograms"
             />
-            <button className="btn" disabled={!draft} onClick={save}>
+            <button className="btn" disabled={!valid} onClick={save}>
               Log
             </button>
           </div>
           <p className="hint" style={{ marginBottom: 0 }}>
-            Same time each morning, before eating. Your water target follows this number.
+            {draft && !valid
+              ? 'Enter a weight in kg — 75,4 and 75.4 both work.'
+              : 'Same time each morning, before eating. Your water target follows this number.'}
           </p>
         </>
       )}
@@ -532,12 +565,9 @@ function SymptomLog({ date }: { date: ISODate }) {
         </div>
         <div>
           <div className="lbl small muted">Sleep (hours)</div>
-          <input
-            type="number"
-            inputMode="decimal"
-            step="0.5"
-            value={s.sleepHours ?? ''}
-            onChange={(e) => set({ sleepHours: e.target.value === '' ? undefined : Number(e.target.value) })}
+          <SleepInput
+            value={s.sleepHours}
+            onChange={(hours) => set({ sleepHours: hours })}
           />
         </div>
         <div>

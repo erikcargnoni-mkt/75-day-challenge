@@ -4,7 +4,27 @@ import { exportJSON, importJSON, localStore } from '../core/storage';
 import { waterTargetMl } from '../core/targets';
 import { phaseFor } from '../core/cycle';
 import { useApp } from '../state/useApp';
-import { Card, Field, ml } from './bits';
+import { Card, DecimalInput, Field, ml, parseDecimal } from './bits';
+
+/**
+ * Holds a text draft rather than writing the number straight through, so the
+ * field can sit at "60," mid-edit. An unparseable draft is simply not committed,
+ * which keeps the profile from ever holding NaN.
+ */
+function StartWeightInput({ value, onChange }: { value: number; onChange: (kg: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  return (
+    <DecimalInput
+      value={draft}
+      ariaLabel="Starting bodyweight in kilograms"
+      onChange={(text) => {
+        setDraft(text);
+        const n = parseDecimal(text);
+        if (n !== null && n >= 25 && n <= 300) onChange(n);
+      }}
+    />
+  );
+}
 
 export function Settings() {
   const { state, apply, replace, today } = useApp();
@@ -45,12 +65,7 @@ export function Settings() {
           label="Starting bodyweight (kg)"
           hint={`Today's water target: ${ml(waterTargetMl(weightOn(state, today), info))} — scaled from your most recent weigh-in.`}
         >
-          <input
-            type="number"
-            inputMode="decimal"
-            value={p.weightKg}
-            onChange={(e) => set({ weightKg: Number(e.target.value) })}
-          />
+          <StartWeightInput value={p.weightKg} onChange={(kg) => set({ weightKg: kg })} />
         </Field>
       </Card>
 

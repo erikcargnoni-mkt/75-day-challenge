@@ -79,6 +79,65 @@ export function Scale({
   );
 }
 
+/**
+ * Reads a decimal from text typed on any keyboard, accepting both `,` and `.`.
+ *
+ * Returns null for anything that isn't a number *yet* — including the partial
+ * states a field passes through while being typed.
+ */
+export function parseDecimal(text: string): number | null {
+  const normalized = text.replace(',', '.').trim();
+  if (normalized === '' || normalized === '.') return null;
+  if (!/^\d*\.?\d*$/.test(normalized)) return null;
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Digits plus at most one separator, with up to two decimal places. */
+const DECIMAL_DRAFT = /^\d{0,4}([.,]\d{0,2})?$/;
+
+/**
+ * A decimal field that survives a comma.
+ *
+ * `type="number"` cannot be used here: the browser discards any value it judges
+ * invalid, and on a phone set to a comma-decimal locale — Spanish, Italian,
+ * most of Europe — the key the numeric keypad offers *is* a comma. The field
+ * would blank on every keystroke and decimals became impossible to enter.
+ * `inputMode="decimal"` still summons the numeric keypad; the parsing is ours.
+ */
+export function DecimalInput({
+  value,
+  onChange,
+  onEnter,
+  placeholder,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (text: string) => void;
+  onEnter?: () => void;
+  placeholder?: string;
+  ariaLabel?: string;
+}) {
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      autoComplete="off"
+      value={value}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+      onChange={(e) => {
+        const next = e.target.value;
+        // "75," has to be holdable — it is what a half-typed decimal looks like.
+        if (next === '' || DECIMAL_DRAFT.test(next)) onChange(next);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onEnter?.();
+      }}
+    />
+  );
+}
+
 export const ml = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}L` : `${n}ml`);
 export const pct = (n: number | null) => (n === null ? '—' : `${Math.round(n * 100)}%`);
 export const num = (n: number | null, digits = 1) => (n === null ? '—' : n.toFixed(digits));
