@@ -2,26 +2,16 @@ import { useState } from 'react';
 import { dismissNotice, startChallenge } from './core/challenge';
 import { phaseFor } from './core/cycle';
 import { formatShort } from './core/date';
-import type { TaskId } from './core/types';
 import { AppProvider, useApp } from './state/useApp';
 import { Card, phaseColor } from './ui/bits';
 import { CycleScreen } from './ui/Cycle';
+import { MissedDays } from './ui/MissedDays';
 import { Onboarding } from './ui/Onboarding';
 import { Progress } from './ui/Progress';
 import { Settings } from './ui/Settings';
 import { Today } from './ui/Today';
 
 type Tab = 'today' | 'cycle' | 'progress' | 'settings';
-
-const TASK_LABEL: Record<TaskId, string> = {
-  workout: 'workout',
-  outdoor: 'outdoor time',
-  water: 'water',
-  nutrition: 'nutrition',
-  reading: 'reading',
-  meditation: 'meditation',
-  photo: 'progress photo',
-};
 
 export default function App() {
   return (
@@ -52,6 +42,8 @@ function Shell() {
 
   return (
     <div className="app" style={style}>
+      {/* Blocks everything until she decides — see MissedDays. */}
+      <MissedDays />
       <NoticeSheet />
       {tab === 'today' && (state.current ? <Today /> : <BetweenAttempts />)}
       {tab === 'cycle' && <CycleScreen />}
@@ -98,6 +90,7 @@ function BetweenAttempts() {
   const { state, apply, today } = useApp();
   const last = state.history[state.history.length - 1];
   const finished = last?.outcome === 'completed';
+  const carried = last?.carried?.length ?? 0;
 
   return (
     <div className="screen">
@@ -105,7 +98,9 @@ function BetweenAttempts() {
       {last && (
         <p className="muted">
           {finished
-            ? `Started ${formatShort(last.startDate)}. Seventy-five days, no gaps.`
+            ? carried === 0
+              ? `Started ${formatShort(last.startDate)}. Seventy-five days, no gaps.`
+              : `Started ${formatShort(last.startDate)}. ${last.reachedDay} clean days, ${carried} carried.`
             : `Your last attempt reached day ${last.reachedDay}. That work happened — it is in your history and it counted for your body, whatever the counter says.`}
         </p>
       )}
@@ -129,34 +124,25 @@ function NoticeSheet() {
   const notice = state.notice;
   if (!notice) return null;
 
+  const finished = state.history[state.history.length - 1];
+  const carried = finished?.carried?.length ?? 0;
   const close = () => apply(dismissNotice);
 
   return (
     <div className="overlay" onClick={close}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
-        {notice.kind === 'completed' ? (
-          <>
-            <h1>You finished.</h1>
-            <p className="muted">
-              Seventy-five days, every task, no gaps. Take the photos from day 1 and today and put
-              them side by side.
-            </p>
-          </>
+        <h1>You finished.</h1>
+        {carried === 0 ? (
+          <p className="muted">
+            Seventy-five days, every task, no gaps. A clean run. Put the photo from day 1 next to
+            today's.
+          </p>
         ) : (
-          <>
-            <h1>Back to day 1.</h1>
-            <p className="muted">
-              {formatShort(notice.date)} closed with{' '}
-              {notice.missed?.length
-                ? notice.missed.map((t) => TASK_LABEL[t]).join(', ')
-                : 'tasks'}{' '}
-              unfinished. You reached day {notice.reachedDay}.
-            </p>
-            <p className="small muted">
-              This is the rule you signed up for, working as intended. It is not a judgement about
-              you.
-            </p>
-          </>
+          <p className="muted">
+            Seventy-five days, {notice.reachedDay} of them clean, {carried} carried. You did not
+            quit — and the record says exactly what happened, which is what makes the {notice.reachedDay}{' '}
+            mean something. Put the photo from day 1 next to today's.
+          </p>
         )}
         <button className="btn primary block" onClick={close}>
           Got it

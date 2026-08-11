@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   addWater,
+  attemptProgress,
+  carryOn,
   completeWorkout,
   dayStatus,
   initialState,
+  isCleanRun,
   logPeriodStart,
   reconcile,
   requiredTasks,
@@ -11,6 +14,7 @@ import {
   setOutdoor,
   setWeight,
   startChallenge,
+  startOver,
   toggleBoolTask,
   weightOn,
   weightSeries,
@@ -146,9 +150,9 @@ describe('rule changes', () => {
     expect(after.notice).toBeUndefined();
   });
 
-  it('still fails a day that was never signed off', () => {
-    const s = fresh();
-    expect(reconcile(s, addDays(START, 1)).current).toBeNull();
+  it('still raises a day that was never signed off', () => {
+    const after = reconcile(fresh(), addDays(START, 1));
+    expect(after.pending?.days).toHaveLength(1);
   });
 });
 
@@ -194,17 +198,17 @@ describe('reconcile', () => {
     const s = fresh();
     const after = reconcile(s, START);
     expect(after.current).not.toBeNull();
-    expect(after.notice).toBeUndefined();
+    expect(after.pending).toBeUndefined();
   });
 
-  it('resets the challenge when a past day was left incomplete', () => {
+  it('raises a decision instead of wiping the attempt', () => {
     const s = fresh();
     const after = reconcile(s, addDays(START, 1));
-    expect(after.current).toBeNull();
-    expect(after.notice?.kind).toBe('reset');
-    expect(after.notice?.reachedDay).toBe(0);
-    expect(after.history).toHaveLength(1);
-    expect(after.history[0].failedOn).toBe(START);
+    expect(after.current).not.toBeNull(); // progress is NOT destroyed
+    expect(after.history).toHaveLength(0);
+    expect(after.pending?.days).toHaveLength(1);
+    expect(after.pending?.days[0].date).toBe(START);
+    expect(after.pending?.days[0].dayIndex).toBe(1);
   });
 
   it('reports which tasks were missed', () => {
@@ -212,26 +216,29 @@ describe('reconcile', () => {
     s = setOutdoor(s, START, 'run');
     s = toggleBoolTask(s, START, 'reading');
     const after = reconcile(s, addDays(START, 1));
-    expect(after.notice?.missed).toEqual(['workout', 'water', 'nutrition', 'meditation', 'photo']);
+    expect(after.pending?.days[0].missed).toEqual([
+      'workout',
+      'water',
+      'nutrition',
+      'meditation',
+      'photo',
+    ]);
   });
 
-  it('resets on days the app was never opened at all', () => {
+  it('collects every unfinished day, including ones never opened', () => {
     let s = fresh();
     s = completeDay(s, START);
-    // Two days pass untouched.
     const after = reconcile(s, addDays(START, 3));
-    expect(after.current).toBeNull();
-    expect(after.notice?.reachedDay).toBe(1);
-    expect(after.history[0].failedOn).toBe(addDays(START, 1));
+    expect(after.current).not.toBeNull();
+    expect(after.pending?.days.map((d) => d.dayIndex)).toEqual([2, 3]);
   });
 
-  it('carries a clean streak forward', () => {
+  it('carries a clean streak forward with nothing pending', () => {
     let s = fresh();
     for (let i = 0; i < 3; i++) s = completeDay(s, addDays(START, i));
     const after = reconcile(s, addDays(START, 3));
-    expect(after.current).not.toBeNull();
     expect(after.current!.reachedDay).toBe(3);
-    expect(after.notice).toBeUndefined();
+    expect(after.pending).toBeUndefined();
   });
 
   it('completes the challenge after 75 clean days', () => {
@@ -241,12 +248,95 @@ describe('reconcile', () => {
     expect(after.current).toBeNull();
     expect(after.notice?.kind).toBe('completed');
     expect(after.history[0].outcome).toBe('completed');
-    expect(after.history[0].reachedDay).toBe(75);
+    expect(isCleanRun(after.history[0])).toBe(true);
   });
 
   it('does nothing before the start date', () => {
     const s = startChallenge(initialState(), addDays(START, 5));
     expect(reconcile(s, START).current).not.toBeNull();
+  });
+});
+
+describe('carrying a missed day', () => {
+  it('keeps the attempt and its day count', () => {
+    let s = fresh();
+    s = completeDay(s, START);
+    s = reconcile(s, addDays(START, 2)); // day 2 unfinished
+    expect(s.pending?.days).toHaveLength(1);
+
+    s = carryOn(s);
+    expect(s.pending).toBeUndefined();
+    expect(s.current).not.toBeNull();
+    expect(s.current!.carried).toEqual([addDays(START, 1)]);
+    expect(s.current!.reachedDay).toBe(1);
+  });
+
+  it('does not raise the same day twice', () => {
+    let s = carryOn(reconcile(fresh(), addDays(START, 1)));
+    s = reconcile(s, addDays(START, 1));
+    expect(s.pending).toBeUndefined();
+  });
+
+  it('raises a new decision for a later miss', () => {
+    let s = carryOn(reconcile(fresh(), addDays(START, 1)));
+    s = reconcile(s, addDays(START, 2));
+    expect(s.pending?.days.map((d) => d.dayIndex)).toEqual([2]);
+  });
+
+  it('finishes the run but never as a clean 75', () => {
+    let s = fresh();
+    for (let i = 1; i < 75; i++) s = completeDay(s, addDays(START, i)); // day 1 skipped
+    s = reconcile(s, addDays(START, 75));
+    s = carryOn(s);
+    s = reconcile(s, addDays(START, 75));
+
+    const done = s.history[0];
+    expect(done.outcome).toBe('completed');
+    expect(done.carried).toEqual([START]);
+    expect(isCleanRun(done)).toBe(false);
+    expect(done.reachedDay).toBe(75);
+  });
+
+  it('accumulates carried days across separate decisions', () => {
+    let s = carryOn(reconcile(fresh(), addDays(START, 1)));
+    s = carryOn(reconcile(s, addDays(START, 3)));
+    expect(s.current!.carried).toEqual([START, addDays(START, 1), addDays(START, 2)]);
+  });
+});
+
+describe('starting over', () => {
+  it('files the old attempt and opens a fresh day 1 today', () => {
+    let s = fresh();
+    s = completeDay(s, START);
+    s = reconcile(s, addDays(START, 2));
+
+    const restarted = startOver(s, addDays(START, 2));
+    expect(restarted.pending).toBeUndefined();
+    expect(restarted.history).toHaveLength(1);
+    expect(restarted.history[0].outcome).toBe('failed');
+    expect(restarted.history[0].reachedDay).toBe(1);
+    expect(restarted.current!.startDate).toBe(addDays(START, 2));
+    expect(restarted.current!.reachedDay).toBe(0);
+  });
+
+  it('keeps the old logs in history rather than deleting them', () => {
+    let s = completeDay(fresh(), START);
+    s = startOver(reconcile(s, addDays(START, 2)), addDays(START, 2));
+    expect(Object.keys(s.history[0].days)).toContain(START);
+  });
+});
+
+describe('attemptProgress', () => {
+  it('separates clean days from carried ones', () => {
+    let s = fresh();
+    s = completeDay(s, START);
+    s = completeDay(s, addDays(START, 2));
+    s = carryOn(reconcile(s, addDays(START, 3)));
+
+    const p = attemptProgress(s, s.current!, addDays(START, 3));
+    expect(p.cleanDays).toBe(2);
+    expect(p.carriedDays).toBe(1);
+    expect(p.dayIndex).toBe(4);
   });
 });
 

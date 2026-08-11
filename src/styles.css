@@ -334,6 +334,12 @@ textarea { resize: vertical; min-height: 70px; }
 }
 .grid75 span.complete { border-color: transparent; }
 .grid75 span.today { outline: 2px solid var(--text); outline-offset: 1px; }
+/* Carried days stay visible for the whole run — that is the point of them. */
+.grid75 span.carried {
+  border-color: var(--danger);
+  border-style: dashed;
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
 
 /* ---------- calendar strip ---------- */
 
@@ -376,6 +382,33 @@ th { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-s
   padding: 24px;
   max-width: 400px;
   width: 100%;
+}
+
+/* ---------- missed-day prompt ---------- */
+
+.missed-list {
+  margin: 14px 0 16px;
+  max-height: 40vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.missed-row {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--danger);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.missed-tasks { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+
+.chip.sm-chip {
+  padding: 3px 8px;
+  font-size: 11.5px;
+  border-radius: 999px;
 }
 
 /* ---------- weight chart ---------- */

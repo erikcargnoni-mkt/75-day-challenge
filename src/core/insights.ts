@@ -79,6 +79,8 @@ export interface Overview {
   totalDaysLogged: number;
   totalWorkouts: number;
   downshifts: number;
+  /** Days kept rather than restarted over. Never quietly forgotten. */
+  carried: number;
 }
 
 export function overview(state: AppState): Overview {
@@ -91,6 +93,7 @@ export function overview(state: AppState): Overview {
     totalDaysLogged: logs.filter((l) => l.completedAt).length,
     totalWorkouts: workouts.length,
     downshifts: workouts.filter((w) => w?.overridden).length,
+    carried: all.reduce((n, a) => n + (a.carried?.length ?? 0), 0),
   };
 }
 

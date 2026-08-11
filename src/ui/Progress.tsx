@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { dayStatus, dateForDayIndex } from '../core/challenge';
+import { dayStatus, dateForDayIndex, isCleanRun } from '../core/challenge';
 import { PHASE_LABEL, phaseFor } from '../core/cycle';
 import { formatShort, type ISODate } from '../core/date';
 import { bandFitMessage, overview, phaseStats, weightTrend } from '../core/insights';
@@ -26,6 +26,7 @@ export function Progress() {
           <Stat label="Best day reached" value={ov.bestDay} />
           <Stat label="Attempts" value={ov.attemptsMade} />
           <Stat label="Days signed off" value={ov.totalDaysLogged} />
+          <Stat label="Days carried" value={ov.carried} />
         </div>
       </Card>
 
@@ -35,7 +36,8 @@ export function Progress() {
           <Card>
             <DayGrid />
             <p className="hint" style={{ marginBottom: 0 }}>
-              Filled squares are days you closed out. Colour is the cycle phase you were in.
+              Filled squares are days you closed out; colour is the cycle phase you were in. Dashed
+              red squares are days you carried — they stay visible for the whole run.
             </p>
           </Card>
         </>
@@ -115,9 +117,16 @@ export function Progress() {
                   {a.failedOn ? ` → ${formatShort(a.failedOn)}` : ''}
                 </span>
                 <span className="row" style={{ gap: 10 }}>
-                  <span className="tiny muted mono">day {a.reachedDay}</span>
-                  <span className={`pill${a.outcome === 'completed' ? '' : ' plain'}`}>
-                    {a.outcome === 'completed' ? 'Finished' : 'Reset'}
+                  <span className="tiny muted mono">
+                    {a.reachedDay} clean
+                    {(a.carried?.length ?? 0) > 0 ? ` · ${a.carried!.length} carried` : ''}
+                  </span>
+                  <span className={`pill${isCleanRun(a) ? '' : ' plain'}`}>
+                    {a.outcome === 'completed'
+                      ? isCleanRun(a)
+                        ? 'Clean 75'
+                        : 'Finished'
+                      : 'Restarted'}
                   </span>
                 </span>
               </div>
@@ -204,13 +213,16 @@ function DayGrid() {
         const dayIndex = i + 1;
         const date = dateForDayIndex(attempt, dayIndex);
         const complete = dayStatus(state, attempt, date).complete;
+        const carried = attempt.carried?.includes(date) ?? false;
         const info = phaseFor(date, state.cycle, state.profile);
         const color = info ? phaseColor(info.phase) : 'var(--muted)';
         return (
           <span
             key={dayIndex}
-            className={`${complete ? 'complete' : ''}${date === today ? ' today' : ''}`}
-            title={`Day ${dayIndex} · ${formatShort(date)}`}
+            className={`${complete ? 'complete' : ''}${carried ? ' carried' : ''}${
+              date === today ? ' today' : ''
+            }`}
+            title={`Day ${dayIndex} · ${formatShort(date)}${carried ? ' · carried' : ''}`}
             style={
               complete
                 ? { background: color }

@@ -49,6 +49,11 @@ export function Today() {
             <span className="of">of {CHALLENGE_LENGTH}</span>
           </div>
           <div className="small muted">{formatLong(today)}</div>
+          {(attempt.carried?.length ?? 0) > 0 && (
+            <div className="tiny muted" style={{ marginTop: 4 }}>
+              {attempt.reachedDay} clean · {attempt.carried!.length} carried
+            </div>
+          )}
         </div>
         {info && (
           <div className="col" style={{ alignItems: 'flex-end' }}>

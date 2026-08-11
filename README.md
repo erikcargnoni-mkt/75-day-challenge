@@ -7,10 +7,13 @@ unforgiving quality is the mechanism, not a side effect. But a body with a menst
 have flat capacity across 28 days, and pretending otherwise produces a program that punishes
 physiology.
 
-So this app splits the two. The **streak** never bends. What bends is the **definition of done** for
-the two pillars where capacity actually changes: training intensity and hydration. Outdoor time,
-nutrition, reading, meditation and the photo are identical in every phase, on purpose — the challenge
-needs a spine.
+So this app splits the two. The **daily bar** never bends: seven tasks, every day, no substitutions.
+What bends is the **definition of done** for the two pillars where capacity actually changes —
+training intensity and hydration. Outdoor time, nutrition, reading, meditation and the photo are
+identical in every phase, on purpose; the challenge needs a spine.
+
+What the app does *not* do is pass sentence on its own. A missed day is put to her as a choice, and
+whichever she picks is recorded permanently — see [Missed days](#missed-days-her-call-permanent-record).
 
 ## The daily rules
 
@@ -24,8 +27,28 @@ needs a spine.
 | Meditation | One sit — 5, 10, 15 or 20 min | No |
 | Progress photo | Daily | No |
 
-Miss any required task on any day and the attempt resets. Training *below* the prescribed band is
-allowed, recorded as a downshift, and does **not** break the streak. Skipping the workout does.
+Training *below* the prescribed band is allowed, recorded as a downshift, and does **not** break the
+streak. Skipping the workout does.
+
+## Missed days: her call, permanent record
+
+The app never resets anything on its own. When past days were left unfinished, the next time she
+opens the app a **blocking prompt** lists exactly what was missed and offers two choices:
+
+- **Keep going** — the day count holds, and those dates are written to `attempt.carried` forever.
+- **Start over** — the run is filed to history and a fresh day 1 opens today. Nothing is deleted.
+
+The original design auto-failed the attempt during `reconcile()`, which meant seventy-five days of
+work could vanish silently while she wasn't looking, on the app's authority. Making her own the
+decision is closer to the point of the thing. What stops that from turning the challenge into a habit
+tracker is that **carrying is never forgotten**: carried days show as dashed red squares in the day
+grid for the whole run, the header reads "N clean · M carried", and only a run with zero carried days
+is reported as a **Clean 75**. She keeps her progress; the app doesn't pretend the day happened.
+
+There is no push notification. iOS 16.4+ supports web push for installed PWAs, but only server-sent —
+a web app cannot reliably schedule a local notification for tomorrow morning, and adding a push
+backend would break the no-server position that keeps her cycle data off the internet. The prompt
+fires on open instead.
 
 Walk-or-run and meditation length are recorded, never scored — both options count equally.
 
@@ -62,8 +85,8 @@ test suite first, so a broken rules engine can't ship.
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
-npm test         # 72 tests over the rules engine and chart geometry
+npm run dev      # http://localhost:5173/75-day-challenge/  (base path, see vite.config.ts)
+npm test         # 89 tests over the rules engine, decisions and chart geometry
 npm run build    # production PWA in dist/
 ```
 
@@ -92,8 +115,9 @@ is the point of the split.
 
 State transitions are pure functions (`AppState → AppState`), so the reset logic is testable without
 mounting anything. `reconcile()` is the one that matters: it's called on load, on focus, and every 30
-seconds, and it fails the attempt for any past day left incomplete — including days the app was never
-opened. The challenge does not pause because you looked away.
+seconds, and it collects any past day left incomplete — including days the app was never opened —
+into a `PendingDecision` the UI blocks on. The challenge does not pause because you looked away; it
+just refuses to decide the consequence for her.
 
 ### Rule changes must never reach backwards
 

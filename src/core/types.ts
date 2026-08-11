@@ -107,18 +107,42 @@ export interface Attempt {
   failedOn?: ISODate;
   /** Highest day index fully completed. */
   reachedDay: number;
+  /**
+   * Days she was shown as unfinished and chose to carry rather than restart.
+   * Permanent: a carried day never becomes a clean one, so a run finished with
+   * entries here is never reported as a clean 75.
+   */
+  carried?: ISODate[];
   days: Record<ISODate, DayLog>;
 }
 
+/** One unfinished past day, waiting on her decision. */
+export interface MissedDay {
+  date: ISODate;
+  dayIndex: number;
+  missed: TaskId[];
+}
+
 /**
- * Something the app decided on the user's behalf while she wasn't looking
- * (a reset, a completion). Persisted so a reload can't swallow the explanation.
+ * Raised by reconcile() when past days were left unfinished. The app blocks on
+ * this until she chooses — carrying on or starting over is her call to make,
+ * not something the app decides while she isn't looking.
+ */
+export interface PendingDecision {
+  attemptId: string;
+  days: MissedDay[];
+}
+
+/**
+ * The run finished. Persisted so a reload can't swallow the moment.
+ *
+ * There is deliberately no "reset" notice: the app no longer resets anything on
+ * its own. Unfinished days raise a PendingDecision instead.
  */
 export interface Notice {
-  kind: 'reset' | 'completed';
+  kind: 'completed';
   date: ISODate;
   reachedDay: number;
-  missed?: TaskId[];
 }
 
 export interface AppState {
@@ -128,6 +152,7 @@ export interface AppState {
   current: Attempt | null;
   history: Attempt[];
   notice?: Notice;
+  pending?: PendingDecision;
 }
 
 export const DEFAULT_PROFILE: Profile = {

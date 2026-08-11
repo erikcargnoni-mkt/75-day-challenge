@@ -10,6 +10,7 @@ import {
   type DayLog,
   type IntensityBand,
   type MeditationMinutes,
+  type MissedDay,
   type OutdoorMode,
   type Profile,
   type Symptoms,
@@ -181,65 +182,130 @@ export function dayStatus(state: AppState, attempt: Attempt, date: ISODate): Day
   };
 }
 
+/** Days already carried, as a set. */
+function carriedSet(attempt: Attempt): Set<ISODate> {
+  return new Set(attempt.carried ?? []);
+}
+
+export interface AttemptProgress {
+  /** Days closed out with every task done. */
+  cleanDays: number;
+  /** Days she chose to carry rather than restart over. */
+  carriedDays: number;
+  /** Calendar day of the attempt, 1-based, capped at 75. */
+  dayIndex: number;
+}
+
+export function attemptProgress(
+  state: AppState,
+  attempt: Attempt,
+  today: ISODate,
+): AttemptProgress {
+  const elapsed = Math.min(daysBetween(attempt.startDate, today) + 1, CHALLENGE_LENGTH);
+  const carried = carriedSet(attempt);
+  let cleanDays = 0;
+  for (let i = 0; i < Math.max(0, elapsed); i++) {
+    const date = addDays(attempt.startDate, i);
+    if (dayStatus(state, attempt, date).complete) cleanDays += 1;
+  }
+  return {
+    cleanDays,
+    carriedDays: [...carried].filter((d) => daysBetween(attempt.startDate, d) < elapsed).length,
+    dayIndex: Math.max(1, elapsed),
+  };
+}
+
 /**
  * Bring state up to date with the calendar.
  *
- * Called on load and on every day rollover. Any past day left incomplete fails
- * the attempt on that date — including days when the app was never opened, which
- * is the point: the challenge does not pause because you looked away.
+ * Called on load, on focus and on every day rollover. Past days left unfinished
+ * do not fail the attempt: they are collected into a pending decision the app
+ * blocks on until she chooses to carry them or start over.
+ *
+ * The old behaviour wiped seventy-five days of work silently, while she wasn't
+ * looking, on the app's own authority. Presenting the truth and making her own
+ * the call is closer to the point of the thing than a counter that resets
+ * itself — but nothing here softens the record. A carried day stays carried.
  */
 export function reconcile(state: AppState, today: ISODate): AppState {
   const attempt = state.current;
   if (!attempt || attempt.outcome !== 'active') return state;
 
   // Nothing to judge before the attempt has started.
-  if (daysBetween(attempt.startDate, today) < 0) return state;
+  const elapsed = daysBetween(attempt.startDate, today);
+  if (elapsed < 0) return state;
 
-  const lastJudgeable = Math.min(
-    daysBetween(attempt.startDate, today) - 1,
-    CHALLENGE_LENGTH - 1,
-  );
-
+  const lastJudgeable = Math.min(elapsed - 1, CHALLENGE_LENGTH - 1);
+  const carried = carriedSet(attempt);
+  const misses: MissedDay[] = [];
   let reachedDay = attempt.reachedDay;
 
   for (let i = 0; i <= lastJudgeable; i++) {
     const date = addDays(attempt.startDate, i);
     const status = dayStatus(state, attempt, date);
-    if (!status.complete) {
-      const failed: Attempt = {
-        ...attempt,
-        outcome: 'failed',
-        failedOn: date,
-        reachedDay,
-      };
-      return {
-        ...state,
-        current: null,
-        history: [...state.history, failed],
-        notice: {
-          kind: 'reset',
-          date,
-          reachedDay,
-          missed: status.missing,
-        },
-      };
+    if (status.complete) {
+      reachedDay = Math.max(reachedDay, status.dayIndex);
+      continue;
     }
-    reachedDay = Math.max(reachedDay, status.dayIndex);
+    if (carried.has(date)) continue;
+    misses.push({ date, dayIndex: status.dayIndex, missed: status.missing });
   }
 
-  // Day 75 signed off — the attempt is finished.
-  if (reachedDay >= CHALLENGE_LENGTH) {
-    const done: Attempt = { ...attempt, outcome: 'completed', reachedDay: CHALLENGE_LENGTH };
+  const base = reachedDay === attempt.reachedDay ? state : { ...state, current: { ...attempt, reachedDay } };
+
+  if (misses.length > 0) {
+    return { ...base, pending: { attemptId: attempt.id, days: misses } };
+  }
+
+  // Every day of the window is resolved and the window has elapsed.
+  if (elapsed >= CHALLENGE_LENGTH) {
+    const finished: Attempt = { ...attempt, outcome: 'completed', reachedDay };
     return {
-      ...state,
+      ...base,
       current: null,
-      history: [...state.history, done],
-      notice: { kind: 'completed', date: dateForDayIndex(attempt, CHALLENGE_LENGTH), reachedDay: CHALLENGE_LENGTH },
+      pending: undefined,
+      history: [...state.history, finished],
+      notice: {
+        kind: 'completed',
+        date: dateForDayIndex(attempt, CHALLENGE_LENGTH),
+        reachedDay,
+      },
     };
   }
 
-  if (reachedDay === attempt.reachedDay) return state;
-  return { ...state, current: { ...attempt, reachedDay } };
+  return base.pending ? { ...base, pending: undefined } : base;
+}
+
+/**
+ * Carry the unfinished days and keep the attempt running. The dates are stored
+ * permanently, so the run can never afterwards be reported as a clean 75.
+ */
+export function carryOn(state: AppState): AppState {
+  const attempt = state.current;
+  if (!attempt || !state.pending) return state;
+  const dates = state.pending.days.map((d) => d.date);
+  return {
+    ...state,
+    current: {
+      ...attempt,
+      carried: [...new Set([...(attempt.carried ?? []), ...dates])].sort(),
+    },
+    pending: undefined,
+  };
+}
+
+/** File the attempt as failed and open a fresh one starting today. */
+export function startOver(state: AppState, today: ISODate): AppState {
+  const attempt = state.current;
+  if (!attempt) return state;
+  const failedOn = state.pending?.days[0]?.date;
+  return {
+    ...state,
+    current: newAttempt(today),
+    history: [...state.history, { ...attempt, outcome: 'failed', failedOn }],
+    pending: undefined,
+    notice: undefined,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -347,7 +413,12 @@ export function setSymptoms(state: AppState, date: ISODate, symptoms: Symptoms):
 }
 
 export function startChallenge(state: AppState, startDate: ISODate): AppState {
-  return { ...state, current: newAttempt(startDate), notice: undefined };
+  return { ...state, current: newAttempt(startDate), notice: undefined, pending: undefined };
+}
+
+/** True when the run reached day 75 with nothing carried. */
+export function isCleanRun(attempt: Attempt): boolean {
+  return attempt.outcome === 'completed' && (attempt.carried?.length ?? 0) === 0;
 }
 
 /** Abandon the running attempt without waiting for a missed day to do it. */
@@ -359,6 +430,7 @@ export function abandonChallenge(state: AppState, today: ISODate): AppState {
     current: null,
     history: [...state.history, { ...attempt, outcome: 'failed', failedOn: today }],
     notice: undefined,
+    pending: undefined,
   };
 }
 
