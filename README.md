@@ -99,7 +99,7 @@ test suite first, so a broken rules engine can't ship.
 ```bash
 npm install
 npm run dev      # http://localhost:5173/75-day-challenge/  (base path, see vite.config.ts)
-npm test         # 101 tests over the rules engine, decisions and chart geometry
+npm test         # 119 tests over the rules engine, decisions, lock and chart geometry
 npm run build    # production PWA in dist/
 ```
 
@@ -118,7 +118,9 @@ src/core/          Pure TypeScript. No React, no DOM. This is the part that port
   insights.ts      Per-phase completion, downshift rates, symptom aggregates
   storage.ts       StateStore interface + localStorage adapter
   photos.ts        IndexedDB blob store
-src/state/         React glue (context, persistence, midnight rollover)
+  lock.ts          PIN derivation, verification, attempt throttling
+src/platform/      Browser APIs a native port would swap: WebAuthn, lock storage
+src/state/         React glue (context, persistence, midnight rollover, lock gate)
 src/ui/            Screens
 ```
 
@@ -157,7 +159,32 @@ account and no server. Cycle data is special-category health data under GDPR Art
 to guarantee it is never mishandled by a backend is to not have one. If this becomes a product, that
 is the position, not a limitation to fix later.
 
-Settings has JSON export/import for backup. Photos are deliberately excluded from the export.
+Settings has JSON export/import for backup. Photos are deliberately excluded from the export — they
+live in a separate IndexedDB store and are structurally incapable of appearing in that file.
+
+Photos are re-encoded through a canvas before storage, which strips **all EXIF** — GPS coordinates
+included — as a side effect worth keeping on purpose. `imageOrientation: 'from-image'` is passed
+explicitly so a phone photo carrying a rotation flag isn't stored sideways.
+
+### App lock
+
+Optional, in Settings: a 6-digit PIN, optionally with Face ID / Touch ID via WebAuthn's platform
+authenticator. The PIN is never stored — only a PBKDF2-SHA256 derivation over a random per-install
+salt at 210k iterations. Failed attempts escalate a cooldown (30s at five, 5 min at ten, an hour at
+fifteen), because six digits is only a million guesses and a script does not get bored.
+
+Lock settings live under their own localStorage key, outside `AppState`, so they never travel in a
+backup file and importing one cannot install or remove a lock.
+
+While locked, `AppProvider` is not mounted at all — the challenge log is never read out of storage,
+let alone rendered.
+
+**What this is not:** encryption. The log and photos sit unencrypted in browser storage, so the lock
+stops a person holding an unlocked phone — the actual threat — and not someone with developer tools.
+Encrypting the photos at rest is a separate job with a real cost: forget the PIN and they are gone.
+
+There is deliberately no PIN recovery. The only way past a forgotten PIN is clearing the app's data,
+which erases everything with it; the setup screen says so before she commits.
 
 ## Known gaps
 

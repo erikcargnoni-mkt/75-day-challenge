@@ -384,6 +384,55 @@ th { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-s
   width: 100%;
 }
 
+/* ---------- lock screen ---------- */
+
+.lockscreen {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 100;
+}
+
+.lock-inner { width: 100%; max-width: 300px; text-align: center; }
+
+.lock-mark {
+  font-size: 40px;
+  line-height: 1;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+
+.pin-dots { display: flex; justify-content: center; gap: 12px; margin-bottom: 26px; }
+.pin-dots i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  transition: background 120ms, border-color 120ms;
+}
+.pin-dots i.on { background: var(--accent); border-color: var(--accent); }
+
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.keypad button {
+  aspect-ratio: 1.35;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 21px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.keypad button:active:not(:disabled) { background: var(--surface-2); }
+.keypad button:disabled { opacity: 0.35; }
+.keypad button.ghost { background: none; border-color: transparent; font-size: 19px; }
+
 /* ---------- missed-day prompt ---------- */
 
 .missed-list {

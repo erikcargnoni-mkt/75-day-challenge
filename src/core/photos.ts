@@ -38,9 +38,17 @@ function tx<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBReque
   );
 }
 
-/** Downscale and re-encode before storing — phone cameras produce 4 MB files. */
+/**
+ * Downscale and re-encode before storing — phone cameras produce 4 MB files.
+ *
+ * `imageOrientation: 'from-image'` is explicit rather than left to the default,
+ * which has changed across the spec's life: without it a phone photo carrying an
+ * EXIF rotation flag can be stored sideways. Re-encoding through the canvas also
+ * drops every EXIF field, GPS coordinates included, which is the behaviour we
+ * want and not an accident to be optimised away.
+ */
 export async function compress(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file);
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
   const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
   const w = Math.round(bitmap.width * scale);
   const h = Math.round(bitmap.height * scale);

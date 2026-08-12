@@ -5,6 +5,7 @@ import { waterTargetMl } from '../core/targets';
 import { phaseFor } from '../core/cycle';
 import { useApp } from '../state/useApp';
 import { Card, DecimalInput, Field, ml, parseDecimal } from './bits';
+import { LockSettings } from './LockSettings';
 
 /**
  * Holds a text draft rather than writing the number straight through, so the
@@ -128,6 +129,9 @@ export function Settings() {
           leave them alone.
         </p>
       </Card>
+
+      <h2>Lock</h2>
+      <LockSettings name={p.name} />
 
       <h2>Your data</h2>
       <Card>

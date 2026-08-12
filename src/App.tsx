@@ -3,6 +3,8 @@ import { dismissNotice, startChallenge } from './core/challenge';
 import { phaseFor } from './core/cycle';
 import { formatShort } from './core/date';
 import { AppProvider, useApp } from './state/useApp';
+import { LockProvider, useLock } from './state/useLock';
+import { LockScreen } from './ui/LockScreen';
 import { Card, phaseColor } from './ui/bits';
 import { CycleScreen } from './ui/Cycle';
 import { MissedDays } from './ui/MissedDays';
@@ -14,6 +16,20 @@ import { Today } from './ui/Today';
 type Tab = 'today' | 'cycle' | 'progress' | 'settings';
 
 export default function App() {
+  return (
+    <LockProvider>
+      <Gate />
+    </LockProvider>
+  );
+}
+
+/**
+ * Nothing renders behind the lock screen — AppProvider is not mounted while
+ * locked, so the challenge log is not even read out of storage, let alone drawn.
+ */
+function Gate() {
+  const { unlocked } = useLock();
+  if (!unlocked) return <LockScreen />;
   return (
     <AppProvider>
       <Shell />
