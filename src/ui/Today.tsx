@@ -1,57 +1,51 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
-  addWater,
-  clearMeditation,
-  clearOutdoor,
-  clearWorkout,
-  completeWorkout,
+  BACKFILL_WINDOW_DAYS,
+  canEditDay,
   dayStatus,
-  setMeditation,
-  setOutdoor,
   setSymptoms,
   setWeight,
-  toggleBoolTask,
   weightOn,
 } from '../core/challenge';
 import { PHASE_LABEL, phaseFor } from '../core/cycle';
-import { formatLong, type ISODate } from '../core/date';
-import { deletePhoto, getPhoto, savePhoto } from '../core/photos';
-import { BAND_LABEL, isDownshift } from '../core/targets';
-import {
-  BAND_ORDER,
-  CHALLENGE_LENGTH,
-  DEFAULT_MEDITATION,
-  MEDITATION_OPTIONS,
-  type IntensityBand,
-  type MeditationMinutes,
-  type OutdoorMode,
-} from '../core/types';
+import { addDays, daysBetween, formatLong, type ISODate } from '../core/date';
+import { CHALLENGE_LENGTH } from '../core/types';
 import { useApp } from '../state/useApp';
-import { Card, Check, DecimalInput, ml, parseDecimal, Scale } from './bits';
+import { Card, DecimalInput, parseDecimal, Scale } from './bits';
+import { DayChecklist } from './DayChecklist';
 
 export function Today() {
-  const { state, apply, today } = useApp();
+  const { state, today } = useApp();
   const attempt = state.current!;
-  const status = dayStatus(state, attempt, today);
-  const info = phaseFor(today, state.cycle, state.profile);
-  const { targets, log } = status;
 
-  const dayIndex = status.dayIndex;
-  const water = log.water ?? 0;
-  const waterPct = Math.min(1, water / targets.waterMl);
+  /*
+   * Which day is on screen. Defaults to today, but she can walk back through the
+   * backfill window — the whole point being that a day she did and forgot to log
+   * is not a day she missed.
+   */
+  const [viewDate, setViewDate] = useState<ISODate>(today);
+  const isToday = viewDate === today;
+
+  const status = dayStatus(state, attempt, viewDate);
+  const info = phaseFor(viewDate, state.cycle, state.profile);
+  const { targets } = status;
+
+  const prev = addDays(viewDate, -1);
+  const canGoBack = canEditDay(attempt, prev, today);
+  const carried = attempt.carried ?? [];
 
   return (
     <div className="screen">
       <div className="row between top">
         <div>
           <div className="daymark">
-            <span className="n mono">{dayIndex}</span>
+            <span className="n mono">{status.dayIndex}</span>
             <span className="of">of {CHALLENGE_LENGTH}</span>
           </div>
-          <div className="small muted">{formatLong(today)}</div>
-          {(attempt.carried?.length ?? 0) > 0 && (
+          <div className="small muted">{formatLong(viewDate)}</div>
+          {carried.length > 0 && isToday && (
             <div className="tiny muted" style={{ marginTop: 4 }}>
-              {attempt.reachedDay} clean · {attempt.carried!.length} carried
+              {attempt.reachedDay} clean · {carried.length} carried
             </div>
           )}
         </div>
@@ -69,266 +63,191 @@ export function Today() {
         )}
       </div>
 
-      <ProgressTrack current={dayIndex} reached={attempt.reachedDay} />
+      <ProgressTrack current={status.dayIndex} reached={attempt.reachedDay} />
 
-      <div className="phase">
-        <div className="row between" style={{ marginBottom: 6 }}>
-          <strong style={{ fontSize: 14 }}>Today's read</strong>
-          {info && !info.confident && <span className="pill plain">Estimate is stale</span>}
-        </div>
-        <p className="small" style={{ margin: 0 }}>
-          {targets.rationale}
-        </p>
-        {info && !info.confident && (
-          <p className="hint" style={{ marginBottom: 0 }}>
-            Two or more cycles have passed since you last logged a period. Log one to re-anchor.
-          </p>
-        )}
+      <div className="daynav">
+        <button
+          className="btn sm ghost"
+          disabled={!canGoBack}
+          onClick={() => setViewDate(prev)}
+          aria-label="Previous day"
+        >
+          ‹ Earlier
+        </button>
+        <span className="tiny muted">{isToday ? 'Today' : agoLabel(viewDate, today)}</span>
+        <button
+          className="btn sm ghost"
+          disabled={isToday}
+          onClick={() => setViewDate(addDays(viewDate, 1))}
+          aria-label="Next day"
+        >
+          Later ›
+        </button>
       </div>
 
-      <Card className="flush">
-        <WorkoutTask />
-
-        <OutdoorTask />
-
-        <div className="task">
-          <Check
-            on={waterPct >= 1}
-            label="Water"
-            onClick={() =>
-              apply((s) =>
-                waterPct >= 1 ? addWater(s, today, -water) : addWater(s, today, targets.waterMl - water),
-              )
-            }
-          />
-          <div className="grow">
-            <div className="row between">
-              <span className="title">Water</span>
-              <span className="small mono muted">
-                {ml(water)} / {ml(targets.waterMl)}
-              </span>
-            </div>
-            <div className="water-bar">
-              <div className="water-fill" style={{ width: `${waterPct * 100}%` }} />
-            </div>
-            <div className="chips">
-              {[250, 500, 750].map((n) => (
-                <button key={n} className="chip" onClick={() => apply((s) => addWater(s, today, n))}>
-                  +{n}
-                </button>
-              ))}
-              {water > 0 && (
-                <button className="chip" onClick={() => apply((s) => addWater(s, today, -250))}>
-                  −250
-                </button>
-              )}
-            </div>
-          </div>
+      {!isToday && (
+        <div className="backfill-banner">
+          <strong className="small">Filling in day {status.dayIndex}.</strong>{' '}
+          <span className="small">
+            Log what you actually did. If this day was carried, completing it clears that.
+          </span>
         </div>
+      )}
 
-        <BoolTask
-          done={log.nutrition === true}
-          title="Nutrition held"
-          sub={targets.nutritionPlan || 'No plan set — add one in Settings.'}
-          onToggle={() => apply((s) => toggleBoolTask(s, today, 'nutrition'))}
-        />
+      {isToday && (
+        <div className="phase">
+          <div className="row between" style={{ marginBottom: 6 }}>
+            <strong style={{ fontSize: 14 }}>Today's read</strong>
+            {info && !info.confident && <span className="pill plain">Estimate is stale</span>}
+          </div>
+          <p className="small" style={{ margin: 0 }}>
+            {targets.rationale}
+          </p>
+          {info && !info.confident && (
+            <p className="hint" style={{ marginBottom: 0 }}>
+              Two or more cycles have passed since you last logged a period. Log one to re-anchor.
+            </p>
+          )}
+        </div>
+      )}
 
-        <BoolTask
-          done={log.reading === true}
-          title={`${targets.readingPages} pages of non-fiction`}
-          sub="Paper or e-reader. Audiobooks do not count."
-          onToggle={() => apply((s) => toggleBoolTask(s, today, 'reading'))}
-        />
+      <DayChecklist date={viewDate} />
 
-        <MeditationTask />
+      <Remaining
+        missing={status.missing.length}
+        complete={status.complete}
+        carried={carried.includes(viewDate)}
+        isToday={isToday}
+      />
 
-        <PhotoTask date={today} done={log.photo === true} />
-      </Card>
+      <WeighIn date={viewDate} />
+      <SymptomLog date={viewDate} />
 
-      <Remaining missing={status.missing.length} complete={status.complete} />
-
-      <WeighIn date={today} />
-
-      <SymptomLog date={today} />
+      {isToday && (
+        <p className="hint center">
+          Forgot to log a day? Tap “Earlier” — you can fill in the last {BACKFILL_WINDOW_DAYS} days.
+        </p>
+      )}
     </div>
   );
+}
+
+function agoLabel(date: ISODate, today: ISODate): string {
+  const n = daysBetween(date, today);
+  return n === 1 ? 'Yesterday' : `${n} days ago`;
 }
 
 function ProgressTrack({ current, reached }: { current: number; reached: number }) {
   return (
     <div className="track" aria-label={`Day ${current} of ${CHALLENGE_LENGTH}`}>
       {Array.from({ length: CHALLENGE_LENGTH }, (_, i) => (
-        <i
-          key={i}
-          className={i + 1 <= reached ? 'done' : i + 1 === current ? 'today' : ''}
-        />
+        <i key={i} className={i + 1 <= reached ? 'done' : i + 1 === current ? 'today' : ''} />
       ))}
     </div>
   );
 }
 
-function BoolTask({
-  done,
-  title,
-  sub,
-  onToggle,
+function Remaining({
+  missing,
+  complete,
+  carried,
+  isToday,
 }: {
-  done: boolean;
-  title: string;
-  sub: string;
-  onToggle: () => void;
+  missing: number;
+  complete: boolean;
+  carried: boolean;
+  isToday: boolean;
 }) {
+  if (complete) {
+    return (
+      <Card>
+        <div className="row">
+          <span className="pill">Day done</span>
+          <span className="small muted grow">
+            {isToday ? 'Signed off. Nothing else owed today.' : 'Signed off — this day counts.'}
+          </span>
+        </div>
+      </Card>
+    );
+  }
   return (
-    <div className={`task${done ? ' done' : ''}`}>
-      <Check on={done} onClick={onToggle} label={title} />
-      <div className="grow col">
-        <span className="title">{title}</span>
-        <span className="sub">{sub}</span>
+    <Card>
+      <div className="row between">
+        <span className="small">
+          <strong>{missing}</strong> {missing === 1 ? 'task' : 'tasks'} left
+        </span>
+        <span className="tiny muted">
+          {carried ? 'Currently carried' : isToday ? 'Resets at midnight' : 'Not yet complete'}
+        </span>
       </div>
-    </div>
+    </Card>
   );
 }
 
 /**
- * The one place the challenge flexes. She picks the band she actually trained.
- * Anything below the prescription is recorded as a downshift and still completes
- * the day — the streak survives, and the log stays honest about what happened.
+ * Sits outside the checklist on purpose. Weight is measured, not scored —
+ * forgetting the scale must not cost the streak.
  */
-function WorkoutTask() {
-  const { state, apply, today } = useApp();
-  const status = dayStatus(state, state.current!, today);
-  const { targets, log } = status;
-  const done = log.workout?.done === true;
-  const prescribed = targets.workout.band;
+function WeighIn({ date }: { date: ISODate }) {
+  const { state, apply } = useApp();
+  const log = state.current!.days[date];
+  const logged = log?.weightKg;
+  const [draft, setDraft] = useState('');
+  const previous = weightOn(state, date);
+  const parsed = parseDecimal(draft);
+  // A plausible-bodyweight guard, not a judgement — it only catches slips like a
+  // missing separator turning 75,4 into 754.
+  const valid = parsed !== null && parsed >= 25 && parsed <= 300;
 
-  const pick = (band: IntensityBand) => {
-    apply((s) =>
-      done && log.workout?.band === band ? clearWorkout(s, today) : completeWorkout(s, today, band),
-    );
+  const save = () => {
+    if (!valid) return;
+    apply((s) => setWeight(s, date, parsed));
+    setDraft('');
   };
 
   return (
-    <div className={`task${done ? ' done' : ''}`}>
-      <Check
-        on={done}
-        label="Workout"
-        onClick={() => apply((s) => (done ? clearWorkout(s, today) : completeWorkout(s, today, prescribed)))}
-      />
-      <div className="grow">
-        <div className="row between">
-          <span className="title">{targets.workout.headline}</span>
+    <Card>
+      <div className="row between" style={{ marginBottom: logged ? 0 : 10 }}>
+        <div className="col">
+          <span className="title">Morning weight</span>
+          <span className="sub">
+            {logged
+              ? `${logged.toFixed(1)} kg logged`
+              : 'Optional, and it never affects your streak.'}
+          </span>
         </div>
-        <div className="sub">{targets.workout.guidance}</div>
+        {logged ? (
+          <button
+            className="btn sm ghost"
+            onClick={() => apply((s) => setWeight(s, date, undefined))}
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
 
-        <div className="chips">
-          {BAND_ORDER.map((band) => {
-            const active = done && log.workout?.band === band;
-            return (
-              <button
-                key={band}
-                className={`chip${active ? ' on' : band === prescribed ? ' prescribed' : ''}`}
-                onClick={() => pick(band)}
-              >
-                {BAND_LABEL[band]}
-                {band === prescribed && !active ? ' ·' : ''}
-              </button>
-            );
-          })}
-        </div>
-
-        {done && log.workout && isDownshift(prescribed, log.workout.band) && (
-          <div className="hint">
-            Logged below today's prescription. That is allowed and your streak is intact — but it is
-            recorded, and if it becomes the pattern the app will tell you.
+      {!logged && (
+        <>
+          <div className="row" style={{ gap: 8 }}>
+            <DecimalInput
+              value={draft}
+              onChange={setDraft}
+              onEnter={save}
+              placeholder={previous.toFixed(1)}
+              ariaLabel="Weight in kilograms"
+            />
+            <button className="btn" disabled={!valid} onClick={save}>
+              Log
+            </button>
           </div>
-        )}
-
-        {targets.workout.caution && !done && <div className="caution">{targets.workout.caution}</div>}
-      </div>
-    </div>
-  );
-}
-
-const OUTDOOR_LABEL: Record<OutdoorMode, string> = { walk: 'Walk', run: 'Run' };
-
-/** Same shape as the workout: tick it, or pick how you did it and it ticks itself. */
-function OutdoorTask() {
-  const { state, apply, today } = useApp();
-  const { targets, log } = dayStatus(state, state.current!, today);
-  const done = log.outdoor?.done === true;
-
-  const pick = (mode: OutdoorMode) =>
-    apply((s) =>
-      done && log.outdoor?.mode === mode ? clearOutdoor(s, today) : setOutdoor(s, today, mode),
-    );
-
-  return (
-    <div className={`task${done ? ' done' : ''}`}>
-      <Check
-        on={done}
-        label="Outdoor time"
-        onClick={() => apply((s) => (done ? clearOutdoor(s, today) : setOutdoor(s, today, 'walk')))}
-      />
-      <div className="grow">
-        <div className="title">{targets.outdoorMinutes} min outdoors</div>
-        <div className="sub">Outside, whatever the weather. This one never scales.</div>
-        <div className="chips">
-          {(['walk', 'run'] as OutdoorMode[]).map((mode) => (
-            <button
-              key={mode}
-              className={`chip${done && log.outdoor?.mode === mode ? ' on' : ''}`}
-              onClick={() => pick(mode)}
-            >
-              {OUTDOOR_LABEL[mode]}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MeditationTask() {
-  const { state, apply, today } = useApp();
-  const { log } = dayStatus(state, state.current!, today);
-  const done = log.meditation?.done === true;
-
-  const pick = (minutes: MeditationMinutes) =>
-    apply((s) =>
-      done && log.meditation?.minutes === minutes
-        ? clearMeditation(s, today)
-        : setMeditation(s, today, minutes),
-    );
-
-  return (
-    <div className={`task${done ? ' done' : ''}`}>
-      <Check
-        on={done}
-        label="Meditation"
-        onClick={() =>
-          apply((s) =>
-            done ? clearMeditation(s, today) : setMeditation(s, today, DEFAULT_MEDITATION),
-          )
-        }
-      />
-      <div className="grow">
-        <div className="title">
-          Meditation{done && log.meditation ? ` · ${log.meditation.minutes} min` : ''}
-        </div>
-        <div className="sub">Sitting, breath, eyes closed. Any length on the list counts.</div>
-        <div className="chips">
-          {MEDITATION_OPTIONS.map((m) => (
-            <button
-              key={m}
-              className={`chip${done && log.meditation?.minutes === m ? ' on' : ''}`}
-              onClick={() => pick(m)}
-            >
-              {m} min
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
+          <p className="hint" style={{ marginBottom: 0 }}>
+            {draft && !valid
+              ? 'Enter a weight in kg — 75,4 and 75.4 both work.'
+              : 'Same time each morning, before eating. Your water target follows this number.'}
+          </p>
+        </>
+      )}
+    </Card>
   );
 }
 
@@ -361,164 +280,6 @@ function SleepInput({
   );
 }
 
-/**
- * Sits outside the checklist on purpose. Weight is measured, not scored —
- * forgetting the scale must not cost the streak.
- */
-function WeighIn({ date }: { date: ISODate }) {
-  const { state, apply } = useApp();
-  const log = state.current!.days[date];
-  const logged = log?.weightKg;
-  const [draft, setDraft] = useState('');
-  const previous = weightOn(state, date);
-  const parsed = parseDecimal(draft);
-  // A plausible-bodyweight guard, not a judgement — it only catches slips like a
-  // missing separator turning 75,4 into 754.
-  const valid = parsed !== null && parsed >= 25 && parsed <= 300;
-
-  const save = () => {
-    if (!valid) return;
-    apply((s) => setWeight(s, date, parsed));
-    setDraft('');
-  };
-
-  return (
-    <Card>
-      <div className="row between" style={{ marginBottom: logged ? 0 : 10 }}>
-        <div className="col">
-          <span className="title">Morning weight</span>
-          <span className="sub">
-            {logged
-              ? `${logged.toFixed(1)} kg logged today`
-              : 'Optional, and it never affects your streak.'}
-          </span>
-        </div>
-        {logged ? (
-          <button className="btn sm ghost" onClick={() => apply((s) => setWeight(s, date, undefined))}>
-            Clear
-          </button>
-        ) : null}
-      </div>
-
-      {!logged && (
-        <>
-          <div className="row" style={{ gap: 8 }}>
-            <DecimalInput
-              value={draft}
-              onChange={setDraft}
-              onEnter={save}
-              placeholder={previous.toFixed(1)}
-              ariaLabel="Weight in kilograms"
-            />
-            <button className="btn" disabled={!valid} onClick={save}>
-              Log
-            </button>
-          </div>
-          <p className="hint" style={{ marginBottom: 0 }}>
-            {draft && !valid
-              ? 'Enter a weight in kg — 75,4 and 75.4 both work.'
-              : 'Same time each morning, before eating. Your water target follows this number.'}
-          </p>
-        </>
-      )}
-    </Card>
-  );
-}
-
-function PhotoTask({ date, done }: { date: ISODate; done: boolean }) {
-  const { apply } = useApp();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [url, setUrl] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    let revoked: string | null = null;
-    getPhoto(date).then((blob) => {
-      if (blob) {
-        revoked = URL.createObjectURL(blob);
-        setUrl(revoked);
-      }
-    });
-    return () => {
-      if (revoked) URL.revokeObjectURL(revoked);
-    };
-  }, [date]);
-
-  const onFile = async (file: File | undefined) => {
-    if (!file) return;
-    setBusy(true);
-    try {
-      await savePhoto(date, file);
-      const blob = await getPhoto(date);
-      if (blob) setUrl(URL.createObjectURL(blob));
-      apply((s) => (s.current?.days[date]?.photo ? s : toggleBoolTask(s, date, 'photo')));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const remove = async () => {
-    await deletePhoto(date);
-    setUrl(null);
-    apply((s) => (s.current?.days[date]?.photo ? toggleBoolTask(s, date, 'photo') : s));
-  };
-
-  return (
-    <div className={`task${done ? ' done' : ''}`}>
-      <Check on={done} label="Progress photo" onClick={() => (url ? remove() : inputRef.current?.click())} />
-      <div className="grow">
-        <div className="title">Progress photo</div>
-        <div className="sub">Same light, same spot, same time of day. Stays on this device.</div>
-        <input
-          ref={inputRef}
-          className="hidden-input"
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={(e) => onFile(e.target.files?.[0])}
-        />
-        {url ? (
-          <div style={{ marginTop: 10 }}>
-            <img className="photo" src={url} alt="Progress photo" />
-            <button className="btn sm ghost" style={{ marginTop: 8 }} onClick={remove}>
-              Remove
-            </button>
-          </div>
-        ) : (
-          <div className="chips">
-            <button className="chip" onClick={() => inputRef.current?.click()} disabled={busy}>
-              {busy ? 'Saving…' : 'Take photo'}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Remaining({ missing, complete }: { missing: number; complete: boolean }) {
-  if (complete) {
-    return (
-      <Card>
-        <div className="row">
-          <span className="pill">Day done</span>
-          <span className="small muted grow">Signed off. Nothing else owed today.</span>
-        </div>
-      </Card>
-    );
-  }
-  return (
-    <Card>
-      <div className="row between">
-        <span className="small">
-          <strong>{missing}</strong> {missing === 1 ? 'task' : 'tasks'} left
-        </span>
-        <span className="tiny muted">Resets at midnight</span>
-      </div>
-    </Card>
-  );
-}
-
 function SymptomLog({ date }: { date: ISODate }) {
   const { state, apply } = useApp();
   const [open, setOpen] = useState(false);
@@ -529,7 +290,7 @@ function SymptomLog({ date }: { date: ISODate }) {
   if (!open) {
     return (
       <button className="btn ghost block" onClick={() => setOpen(true)}>
-        {logged ? 'Edit how today felt' : 'Log how today felt (optional)'}
+        {logged ? 'Edit how the day felt' : 'Log how the day felt (optional)'}
       </button>
     );
   }
@@ -539,7 +300,7 @@ function SymptomLog({ date }: { date: ISODate }) {
   return (
     <Card>
       <div className="row between" style={{ marginBottom: 12 }}>
-        <strong style={{ fontSize: 14 }}>How today felt</strong>
+        <strong style={{ fontSize: 14 }}>How the day felt</strong>
         <button className="btn sm ghost" onClick={() => setOpen(false)}>
           Close
         </button>
@@ -570,17 +331,14 @@ function SymptomLog({ date }: { date: ISODate }) {
         </div>
         <div>
           <div className="lbl small muted">Sleep (hours)</div>
-          <SleepInput
-            value={s.sleepHours}
-            onChange={(hours) => set({ sleepHours: hours })}
-          />
+          <SleepInput value={s.sleepHours} onChange={(hours) => set({ sleepHours: hours })} />
         </div>
         <div>
           <div className="lbl small muted">Note</div>
           <textarea
             value={s.note ?? ''}
             onChange={(e) => set({ note: e.target.value })}
-            placeholder="Anything worth remembering about today."
+            placeholder="Anything worth remembering about this day."
           />
         </div>
       </div>

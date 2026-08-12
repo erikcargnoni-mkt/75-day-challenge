@@ -2,9 +2,12 @@ import { describe, it, expect } from 'vitest';
 import {
   addWater,
   attemptProgress,
+  BACKFILL_WINDOW_DAYS,
+  canEditDay,
   carryOn,
   completeWorkout,
   dayStatus,
+  earliestEditableDate,
   initialState,
   isCleanRun,
   logPeriodStart,
@@ -20,7 +23,7 @@ import {
   weightSeries,
 } from './challenge';
 import { addDays, type ISODate } from './date';
-import { DEFAULT_MEDITATION, DEFAULT_PROFILE, type AppState } from './types';
+import { CHALLENGE_LENGTH, DEFAULT_MEDITATION, DEFAULT_PROFILE, type AppState } from './types';
 
 const START: ISODate = '2026-03-01';
 
@@ -301,6 +304,98 @@ describe('carrying a missed day', () => {
     let s = carryOn(reconcile(fresh(), addDays(START, 1)));
     s = carryOn(reconcile(s, addDays(START, 3)));
     expect(s.current!.carried).toEqual([START, addDays(START, 1), addDays(START, 2)]);
+  });
+});
+
+describe('logging a day late', () => {
+  it('un-carries a day that was only carried because it was not logged', () => {
+    // She did everything yesterday, forgot to log it, and carried it.
+    let s = carryOn(reconcile(fresh(), addDays(START, 1)));
+    expect(s.current!.carried).toEqual([START]);
+
+    // The next morning she fills the day in.
+    s = completeDay(s, START);
+
+    expect(s.current!.carried).toEqual([]);
+    expect(s.current!.reachedDay).toBe(1);
+    expect(dayStatus(s, s.current!, START).complete).toBe(true);
+  });
+
+  it('leaves the carry in place while the day is still incomplete', () => {
+    let s = carryOn(reconcile(fresh(), addDays(START, 1)));
+    s = setOutdoor(s, START, 'run'); // one task only
+    expect(s.current!.carried).toEqual([START]);
+  });
+
+  it('does not re-raise a day that was filled in late', () => {
+    let s = carryOn(reconcile(fresh(), addDays(START, 1)));
+    s = completeDay(s, START);
+    s = reconcile(s, addDays(START, 1));
+    expect(s.pending).toBeUndefined();
+  });
+
+  it('keeps other carried days untouched', () => {
+    let s = carryOn(reconcile(fresh(), addDays(START, 2))); // days 1 and 2 carried
+    expect(s.current!.carried).toEqual([START, addDays(START, 1)]);
+    s = completeDay(s, addDays(START, 1));
+    expect(s.current!.carried).toEqual([START]);
+  });
+
+  it('does not carry a day that was logged after the prompt appeared', () => {
+    // Days 1 and 2 raised; she logs day 1, then taps Keep going.
+    let s = reconcile(fresh(), addDays(START, 2));
+    expect(s.pending?.days).toHaveLength(2);
+    s = completeDay(s, START);
+    s = carryOn(s);
+    expect(s.current!.carried).toEqual([addDays(START, 1)]);
+  });
+
+  it('carries nothing when every pending day was logged in the meantime', () => {
+    let s = reconcile(fresh(), addDays(START, 1));
+    s = completeDay(s, START);
+    s = carryOn(s);
+    expect(s.current!.carried ?? []).toEqual([]);
+    expect(s.pending).toBeUndefined();
+  });
+
+  it('drops the day out of a pending decision as soon as it is complete', () => {
+    let s = reconcile(fresh(), addDays(START, 1));
+    expect(s.pending?.days).toHaveLength(1);
+    s = completeDay(s, START);
+    s = reconcile(s, addDays(START, 1));
+    expect(s.pending).toBeUndefined();
+    expect(s.current!.reachedDay).toBe(1);
+  });
+});
+
+describe('canEditDay', () => {
+  const attempt = fresh().current!;
+
+  it('allows today and the whole backfill window', () => {
+    const today = addDays(START, 20);
+    expect(canEditDay(attempt, today, today)).toBe(true);
+    expect(canEditDay(attempt, addDays(today, -1), today)).toBe(true);
+    expect(canEditDay(attempt, addDays(today, -BACKFILL_WINDOW_DAYS), today)).toBe(true);
+  });
+
+  it('closes a day once it falls out of the window', () => {
+    const today = addDays(START, 20);
+    expect(canEditDay(attempt, addDays(today, -BACKFILL_WINDOW_DAYS - 1), today)).toBe(false);
+  });
+
+  it('refuses the future', () => {
+    expect(canEditDay(attempt, addDays(START, 1), START)).toBe(false);
+  });
+
+  it('refuses dates outside the attempt', () => {
+    const today = addDays(START, 2);
+    expect(canEditDay(attempt, addDays(START, -1), today)).toBe(false);
+    expect(canEditDay(attempt, addDays(START, CHALLENGE_LENGTH), addDays(START, 200))).toBe(false);
+  });
+
+  it('never offers a date before the attempt began', () => {
+    expect(earliestEditableDate(attempt, addDays(START, 2))).toBe(START);
+    expect(earliestEditableDate(attempt, addDays(START, 30))).toBe(addDays(START, 23));
   });
 });
 

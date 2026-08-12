@@ -94,6 +94,30 @@ export function requiredTasks(): TaskId[] {
 }
 
 /**
+ * How far back a day can still be filled in.
+ *
+ * Some window is necessary — forgetting to log last night is ordinary, and
+ * punishing it is what carrying was never meant to be for. An unbounded one
+ * isn't a log any more, it's a memory test taken at the end. A week covers a
+ * forgotten evening or a weekend away and stops there.
+ */
+export const BACKFILL_WINDOW_DAYS = 7;
+
+/** Whether `date` is still open for editing, given today. */
+export function canEditDay(attempt: Attempt, date: ISODate, today: ISODate): boolean {
+  const dayIndex = dayIndexFor(attempt, date);
+  if (dayIndex < 1 || dayIndex > CHALLENGE_LENGTH) return false;
+  const age = daysBetween(date, today);
+  return age >= 0 && age <= BACKFILL_WINDOW_DAYS;
+}
+
+/** The earliest date still open for editing. */
+export function earliestEditableDate(attempt: Attempt, today: ISODate): ISODate {
+  const limit = addDays(today, -BACKFILL_WINDOW_DAYS);
+  return limit < attempt.startDate ? attempt.startDate : limit;
+}
+
+/**
  * The weight the day's water target is scaled from: her most recent weigh-in on
  * or before that date, falling back to the profile figure from setup.
  */
@@ -283,7 +307,12 @@ export function reconcile(state: AppState, today: ISODate): AppState {
 export function carryOn(state: AppState): AppState {
   const attempt = state.current;
   if (!attempt || !state.pending) return state;
-  const dates = state.pending.days.map((d) => d.date);
+  // Any day she filled in since the prompt appeared is complete now and must not
+  // be swept up by the button that was rendered before she did it.
+  const dates = state.pending.days
+    .filter((d) => !dayStatus(state, attempt, d.date).complete)
+    .map((d) => d.date);
+  if (dates.length === 0) return { ...state, pending: undefined };
   return {
     ...state,
     current: {
@@ -329,11 +358,22 @@ function withLog(state: AppState, date: ISODate, mutate: (log: DayLog) => DayLog
   if (complete) reachedDay = Math.max(reachedDay, dayIndex);
   else if (reachedDay === dayIndex) reachedDay = dayIndex - 1;
 
+  /*
+   * A day carried only because she forgot to log it stops being carried the
+   * moment the log is filled in. Carrying is meant to record days the work
+   * didn't happen — not days the phone didn't hear about it.
+   */
+  const carried =
+    complete && attempt.carried?.includes(date)
+      ? attempt.carried.filter((d) => d !== date)
+      : attempt.carried;
+
   return {
     ...state,
     current: {
       ...attempt,
       reachedDay,
+      carried,
       days: {
         ...attempt.days,
         [date]: {
@@ -455,4 +495,9 @@ export function updateProfile(state: AppState, patch: Partial<Profile>): AppStat
 
 export function dismissNotice(state: AppState): AppState {
   return { ...state, notice: undefined };
+}
+
+/** Drop a pending decision that has resolved itself — every day got logged. */
+export function clearPending(state: AppState): AppState {
+  return state.pending ? { ...state, pending: undefined } : state;
 }

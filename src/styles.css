@@ -405,6 +405,28 @@ th { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-s
 
 .missed-tasks { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
 
+.sheet.wide { max-width: 460px; }
+.sheet-scroll { max-height: 55vh; overflow-y: auto; margin: 12px 0; }
+
+/* ---------- day navigation ---------- */
+
+.daynav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.daynav .btn[disabled] { opacity: 0.35; }
+
+.backfill-banner {
+  border-radius: var(--radius);
+  padding: 12px var(--pad);
+  margin-bottom: 12px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
 .chip.sm-chip {
   padding: 3px 8px;
   font-size: 11.5px;

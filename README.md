@@ -33,10 +33,23 @@ streak. Skipping the workout does.
 ## Missed days: her call, permanent record
 
 The app never resets anything on its own. When past days were left unfinished, the next time she
-opens the app a **blocking prompt** lists exactly what was missed and offers two choices:
+opens the app a **blocking prompt** lists exactly what was missed and offers three answers:
 
+- **I did this — log it** — opens that day's checklist. The commonest true answer, and the reason the
+  other two are a last resort.
 - **Keep going** — the day count holds, and those dates are written to `attempt.carried` forever.
 - **Start over** — the run is filed to history and a fresh day 1 opens today. Nothing is deleted.
+
+### Backfilling
+
+A day can be filled in for `BACKFILL_WINDOW_DAYS` (7) after the fact, from the prompt or by tapping
+*Earlier* on the Today screen. **Completing a carried day un-carries it automatically** — carrying is
+meant to record days the work didn't happen, not days the phone didn't hear about it.
+
+The window exists because an unbounded one isn't a log any more, it's a memory test taken at the end;
+a week covers a forgotten evening or a weekend away and stops there. It was a real bug that the first
+version of the prompt offered no way to say *I did it, I just forgot to log it* — it charged a clean
+day as a carried one, which is exactly the unfairness carrying was supposed to avoid.
 
 The original design auto-failed the attempt during `reconcile()`, which meant seventy-five days of
 work could vanish silently while she wasn't looking, on the app's authority. Making her own the
@@ -86,7 +99,7 @@ test suite first, so a broken rules engine can't ship.
 ```bash
 npm install
 npm run dev      # http://localhost:5173/75-day-challenge/  (base path, see vite.config.ts)
-npm test         # 89 tests over the rules engine, decisions and chart geometry
+npm test         # 101 tests over the rules engine, decisions and chart geometry
 npm run build    # production PWA in dist/
 ```
 
@@ -101,7 +114,7 @@ src/core/          Pure TypeScript. No React, no DOM. This is the part that port
   types.ts         Domain model
   cycle.ts         Phase estimation, rolling cycle length
   targets.ts       Phase → daily targets. The whole "what bends" policy lives here.
-  challenge.ts     Streak rules, day completion, rollover/reset, all state transitions
+  challenge.ts     Streak rules, day completion, backfill window, all state transitions
   insights.ts      Per-phase completion, downshift rates, symptom aggregates
   storage.ts       StateStore interface + localStorage adapter
   photos.ts        IndexedDB blob store
