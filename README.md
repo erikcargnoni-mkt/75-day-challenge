@@ -9,8 +9,8 @@ physiology.
 
 So this app splits the two. The **daily bar** never bends: seven tasks, every day, no substitutions.
 What bends is the **definition of done** for the two pillars where capacity actually changes —
-training intensity and hydration. Outdoor time, nutrition, reading, meditation and the photo are
-identical in every phase, on purpose; the challenge needs a spine.
+training intensity and hydration. Outdoor time, nutrition, the cold shower, meditation and the photo
+are identical in every phase, on purpose; the challenge needs a spine.
 
 What the app does *not* do is pass sentence on its own. A missed day is put to her as a choice, and
 whichever she picks is recorded permanently — see [Missed days](#missed-days-her-call-permanent-record).
