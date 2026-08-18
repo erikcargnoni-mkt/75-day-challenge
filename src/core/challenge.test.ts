@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   addWater,
+  ALL_TASKS,
   attemptProgress,
   BACKFILL_WINDOW_DAYS,
   canEditDay,
@@ -11,7 +12,9 @@ import {
   initialState,
   isCleanRun,
   logPeriodStart,
+  OPTIONAL_TASKS,
   reconcile,
+  REQUIRED_TASKS,
   requiredTasks,
   setMeditation,
   setOutdoor,
@@ -40,7 +43,7 @@ function completeDay(state: AppState, date: ISODate): AppState {
   s = setOutdoor(s, date, 'walk');
   s = setMeditation(s, date, DEFAULT_MEDITATION);
   s = toggleBoolTask(s, date, 'nutrition');
-  s = toggleBoolTask(s, date, 'reading');
+  s = toggleBoolTask(s, date, 'coldShower');
   s = toggleBoolTask(s, date, 'photo');
   s = addWater(s, date, status.targets.waterMl);
   return s;
@@ -53,14 +56,53 @@ describe('requiredTasks', () => {
       'outdoor',
       'water',
       'nutrition',
-      'reading',
+      'coldShower',
       'meditation',
       'photo',
     ]);
   });
 
-  it('does not require the weigh-in', () => {
-    expect(requiredTasks()).not.toContain('weight');
+  it('does not require reading or the weigh-in', () => {
+    expect(requiredTasks()).not.toContain('reading');
+    expect(OPTIONAL_TASKS).toContain('reading');
+  });
+
+  it('still shows every task on the checklist', () => {
+    expect(ALL_TASKS).toContain('reading');
+    expect(ALL_TASKS).toHaveLength(REQUIRED_TASKS.length + OPTIONAL_TASKS.length);
+  });
+});
+
+describe('cold shower', () => {
+  it('is required, so a day without it is not complete', () => {
+    let s = completeDay(fresh(), START);
+    expect(dayStatus(s, s.current!, START).complete).toBe(true);
+
+    s = toggleBoolTask(s, START, 'coldShower');
+    expect(dayStatus(s, s.current!, START).missing).toContain('coldShower');
+  });
+});
+
+describe('reading is optional', () => {
+  it('completes a day without it', () => {
+    const s = completeDay(fresh(), START);
+    expect(s.current!.days[START].reading).toBeUndefined();
+    expect(dayStatus(s, s.current!, START).complete).toBe(true);
+  });
+
+  it('never appears in the missing list', () => {
+    const s = fresh();
+    expect(dayStatus(s, s.current!, START).missing).not.toContain('reading');
+  });
+
+  it('is still logged when she does it', () => {
+    const s = toggleBoolTask(fresh(), START, 'reading');
+    expect(s.current!.days[START].reading).toBe(true);
+  });
+
+  it('cannot on its own hold a day back or push it through', () => {
+    const withReading = toggleBoolTask(fresh(), START, 'reading');
+    expect(dayStatus(withReading, withReading.current!, START).complete).toBe(false);
   });
 });
 
@@ -188,11 +230,18 @@ describe('day completion', () => {
     expect(dayStatus(s, s.current!, d).missing).not.toContain('workout');
   });
 
-  it('walks reachedDay back when a task is un-checked', () => {
+  it('walks reachedDay back when a required task is un-checked', () => {
     let s = completeDay(fresh(), START);
     expect(s.current!.reachedDay).toBe(1);
-    s = toggleBoolTask(s, START, 'reading');
+    s = toggleBoolTask(s, START, 'nutrition');
     expect(s.current!.reachedDay).toBe(0);
+  });
+
+  it('leaves reachedDay alone when an optional task is un-checked', () => {
+    let s = toggleBoolTask(completeDay(fresh(), START), START, 'reading');
+    expect(s.current!.reachedDay).toBe(1);
+    s = toggleBoolTask(s, START, 'reading');
+    expect(s.current!.reachedDay).toBe(1);
   });
 });
 
@@ -217,12 +266,13 @@ describe('reconcile', () => {
   it('reports which tasks were missed', () => {
     let s = fresh();
     s = setOutdoor(s, START, 'run');
-    s = toggleBoolTask(s, START, 'reading');
+    s = toggleBoolTask(s, START, 'reading'); // optional: must not appear below
     const after = reconcile(s, addDays(START, 1));
     expect(after.pending?.days[0].missed).toEqual([
       'workout',
       'water',
       'nutrition',
+      'coldShower',
       'meditation',
       'photo',
     ]);
@@ -365,6 +415,53 @@ describe('logging a day late', () => {
     s = reconcile(s, addDays(START, 1));
     expect(s.pending).toBeUndefined();
     expect(s.current!.reachedDay).toBe(1);
+  });
+});
+
+describe('relaxing a rule releases days carried under it', () => {
+  /*
+   * Reading moving out of the required set is exactly this case: a day carried
+   * only because reading was missing was carried for a rule that no longer
+   * exists. Reconcile must hand it back rather than charge her for a change she
+   * did not make.
+   */
+  it('un-carries a day the current rules would now pass', () => {
+    let s = fresh();
+    s = completeDay(s, START); // complete under today's rules
+    // Force it into the carried list as if an older, stricter rule had failed it.
+    s = {
+      ...s,
+      current: {
+        ...s.current!,
+        carried: [START],
+        days: { ...s.current!.days, [START]: { ...s.current!.days[START], completedAt: undefined } },
+      },
+    };
+
+    s = reconcile(s, addDays(START, 1));
+    expect(s.current!.carried).toEqual([]);
+    expect(s.pending).toBeUndefined();
+  });
+
+  it('stamps the released day so a later rule addition cannot un-sign it', () => {
+    let s = completeDay(fresh(), START);
+    s = {
+      ...s,
+      current: {
+        ...s.current!,
+        carried: [START],
+        days: { ...s.current!.days, [START]: { ...s.current!.days[START], completedAt: undefined } },
+      },
+    };
+    s = reconcile(s, addDays(START, 1));
+    expect(s.current!.days[START].completedAt).toBeDefined();
+  });
+
+  it('leaves a genuinely unfinished carried day carried', () => {
+    let s = carryOn(reconcile(fresh(), addDays(START, 1)));
+    expect(s.current!.carried).toEqual([START]);
+    s = reconcile(s, addDays(START, 1));
+    expect(s.current!.carried).toEqual([START]);
   });
 });
 

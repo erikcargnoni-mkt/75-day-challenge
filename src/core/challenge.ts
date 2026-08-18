@@ -84,14 +84,27 @@ export const REQUIRED_TASKS: TaskId[] = [
   'outdoor',
   'water',
   'nutrition',
-  'reading',
+  'coldShower',
   'meditation',
   'photo',
 ];
 
+/**
+ * Logged, celebrated, never scored.
+ *
+ * Reading sits here rather than in the required set because it is the one pillar
+ * whose value is entirely in the habit rather than the compliance — and because
+ * a day that was physically perfect should not be forfeit over ten pages. It
+ * keeps its own streak instead, which is the reward for doing it.
+ */
+export const OPTIONAL_TASKS: TaskId[] = ['reading'];
+
 export function requiredTasks(): TaskId[] {
   return REQUIRED_TASKS;
 }
+
+/** Every task shown on the checklist, required or not, in display order. */
+export const ALL_TASKS: TaskId[] = [...REQUIRED_TASKS, ...OPTIONAL_TASKS];
 
 /**
  * How far back a day can still be filled in.
@@ -147,6 +160,8 @@ export function isTaskDone(log: DayLog, task: TaskId, targets: DayTargets): bool
       return (log.water ?? 0) >= targets.waterMl;
     case 'nutrition':
       return log.nutrition === true;
+    case 'coldShower':
+      return log.coldShower === true;
     case 'reading':
       return log.reading === true;
     case 'meditation':
@@ -211,6 +226,39 @@ function carriedSet(attempt: Attempt): Set<ISODate> {
   return new Set(attempt.carried ?? []);
 }
 
+/**
+ * Release carried days that the current rules would now pass.
+ *
+ * When a task is *removed* from the required set — reading becoming optional —
+ * a day carried only because that task was missing was carried for a rule that
+ * no longer exists. Leaving it carried would charge her for a change she did not
+ * make, which is exactly the unfairness carrying is supposed to avoid.
+ *
+ * The day is stamped `completedAt` on release so a later rule *addition* cannot
+ * un-sign it again; see isDayComplete().
+ */
+function releaseCarried(state: AppState, attempt: Attempt, now: string): Attempt {
+  const carried = attempt.carried ?? [];
+  if (carried.length === 0) return attempt;
+
+  const freed = carried.filter((date) =>
+    meetsRequirements(logFor(attempt, date), targetsForDate(state, date)),
+  );
+  if (freed.length === 0) return attempt;
+
+  const days = { ...attempt.days };
+  for (const date of freed) {
+    const log = logFor(attempt, date);
+    days[date] = { ...log, completedAt: log.completedAt ?? now };
+  }
+
+  return {
+    ...attempt,
+    carried: carried.filter((d) => !freed.includes(d)),
+    days,
+  };
+}
+
 export interface AttemptProgress {
   /** Days closed out with every task done. */
   cleanDays: number;
@@ -252,12 +300,15 @@ export function attemptProgress(
  * itself — but nothing here softens the record. A carried day stays carried.
  */
 export function reconcile(state: AppState, today: ISODate): AppState {
-  const attempt = state.current;
-  if (!attempt || attempt.outcome !== 'active') return state;
+  const running = state.current;
+  if (!running || running.outcome !== 'active') return state;
 
   // Nothing to judge before the attempt has started.
-  const elapsed = daysBetween(attempt.startDate, today);
+  const elapsed = daysBetween(running.startDate, today);
   if (elapsed < 0) return state;
+
+  const attempt = releaseCarried(state, running, new Date().toISOString());
+  if (attempt !== running) state = { ...state, current: attempt };
 
   const lastJudgeable = Math.min(elapsed - 1, CHALLENGE_LENGTH - 1);
   const carried = carriedSet(attempt);
@@ -275,7 +326,8 @@ export function reconcile(state: AppState, today: ISODate): AppState {
     misses.push({ date, dayIndex: status.dayIndex, missed: status.missing });
   }
 
-  const base = reachedDay === attempt.reachedDay ? state : { ...state, current: { ...attempt, reachedDay } };
+  const base =
+    reachedDay === attempt.reachedDay ? state : { ...state, current: { ...attempt, reachedDay } };
 
   if (misses.length > 0) {
     return { ...base, pending: { attemptId: attempt.id, days: misses } };
@@ -388,7 +440,7 @@ function withLog(state: AppState, date: ISODate, mutate: (log: DayLog) => DayLog
 export function toggleBoolTask(
   state: AppState,
   date: ISODate,
-  task: 'nutrition' | 'reading' | 'photo',
+  task: 'nutrition' | 'coldShower' | 'reading' | 'photo',
 ): AppState {
   return withLog(state, date, (log) => ({ ...log, [task]: !log[task] }));
 }

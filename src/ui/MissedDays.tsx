@@ -23,6 +23,7 @@ const TASK_LABEL: Record<TaskId, string> = {
   outdoor: 'Outdoors',
   water: 'Water',
   nutrition: 'Nutrition',
+  coldShower: 'Cold shower',
   reading: 'Reading',
   meditation: 'Meditation',
   photo: 'Photo',

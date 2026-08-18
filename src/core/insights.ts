@@ -1,6 +1,6 @@
 import { dayStatus, targetsForDate, weightSeries } from './challenge';
 import { phaseFor } from './cycle';
-import type { ISODate } from './date';
+import { addDays, type ISODate } from './date';
 import type { AppState, Attempt, DayLog, Phase } from './types';
 
 /**
@@ -147,6 +147,60 @@ export function weightTrend(state: AppState): WeightTrend {
       smoothed.length >= 2 ? smoothed[smoothed.length - 1] - smoothed[0] : null,
     min: kgs.length ? Math.min(...kgs) : 0,
     max: kgs.length ? Math.max(...kgs) : 0,
+  };
+}
+
+export interface ReadingStats {
+  daysRead: number;
+  /** Consecutive days up to today, or up to yesterday if today is not logged yet. */
+  currentStreak: number;
+  longestStreak: number;
+  /** Days read x the daily page target. An estimate, and labelled as one. */
+  pages: number;
+  readToday: boolean;
+}
+
+/**
+ * Reading is the one pillar that is logged but never scored, so it needs its own
+ * reason to keep happening. A streak is that reason: nothing is taken away for
+ * missing a day, and something visibly accumulates for not missing one.
+ *
+ * The streak counts up to yesterday when today has not been logged yet, so it
+ * does not appear broken every morning before she has read.
+ */
+export function readingStats(state: AppState, today: ISODate): ReadingStats {
+  const attempts = state.current ? [...state.history, state.current] : state.history;
+  const read = new Set<ISODate>();
+  for (const attempt of attempts) {
+    for (const log of Object.values(attempt.days)) {
+      if (log.reading === true) read.add(log.date);
+    }
+  }
+
+  const readToday = read.has(today);
+  const yesterday = addDays(today, -1);
+
+  let currentStreak = 0;
+  let cursor = readToday ? today : read.has(yesterday) ? yesterday : null;
+  while (cursor && read.has(cursor)) {
+    currentStreak += 1;
+    cursor = addDays(cursor, -1);
+  }
+
+  let longestStreak = 0;
+  let run = 0;
+  const sorted = [...read].sort();
+  sorted.forEach((date, i) => {
+    run = i > 0 && addDays(sorted[i - 1], 1) === date ? run + 1 : 1;
+    longestStreak = Math.max(longestStreak, run);
+  });
+
+  return {
+    daysRead: read.size,
+    currentStreak,
+    longestStreak,
+    pages: read.size * state.profile.readingPages,
+    readToday,
   };
 }
 

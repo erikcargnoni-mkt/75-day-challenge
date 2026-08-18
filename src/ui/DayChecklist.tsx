@@ -21,11 +21,12 @@ import {
   type MeditationMinutes,
   type OutdoorMode,
 } from '../core/types';
+import { readingStats } from '../core/insights';
 import { useApp } from '../state/useApp';
 import { Card, Check, ml } from './bits';
 
 /**
- * The seven daily tasks, for any date.
+ * The daily tasks for any date: seven required, plus reading, which is not.
  *
  * Every task takes the date as a prop rather than reaching for "today", which is
  * what lets a forgotten evening be filled in the next morning. The core has
@@ -87,14 +88,15 @@ export function DayChecklist({ date }: { date: ISODate }) {
       />
 
       <BoolTask
-        done={log.reading === true}
-        title={`${targets.readingPages} pages of non-fiction`}
-        sub="Paper or e-reader. Audiobooks do not count."
-        onToggle={() => apply((s) => toggleBoolTask(s, date, 'reading'))}
+        done={log.coldShower === true}
+        title="Cold shower"
+        sub="End cold and stay there. Long enough that it stops being a dare and starts being a habit."
+        onToggle={() => apply((s) => toggleBoolTask(s, date, 'coldShower'))}
       />
 
       <MeditationTask date={date} />
       <PhotoTask date={date} done={log.photo === true} />
+      <ReadingTask date={date} />
     </Card>
   );
 }
@@ -116,6 +118,58 @@ function BoolTask({
       <div className="grow col">
         <span className="title">{title}</span>
         <span className="sub">{sub}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Reading, the one optional pillar.
+ *
+ * It cannot cost her the day, so the only thing that can keep it happening is
+ * making the doing of it visibly worth something. The streak is the whole
+ * reward, and it is shown at the moment she ticks the box rather than buried on
+ * another screen.
+ */
+function ReadingTask({ date }: { date: ISODate }) {
+  const { state, apply, today } = useApp();
+  const { targets, log } = dayStatus(state, state.current!, date);
+  const done = log.reading === true;
+  const stats = readingStats(state, today);
+
+  return (
+    <div className={`task optional${done ? ' done' : ''}`}>
+      <Check
+        on={done}
+        onClick={() => apply((s) => toggleBoolTask(s, date, 'reading'))}
+        label="Reading"
+      />
+      <div className="grow">
+        <div className="row between">
+          <span className="title">{targets.readingPages} pages of non-fiction</span>
+          <span className="pill plain">Optional</span>
+        </div>
+        <div className="sub">
+          {done
+            ? 'Paper or e-reader. Audiobooks do not count.'
+            : 'Skipping this never costs you the day.'}
+        </div>
+
+        {stats.currentStreak > 0 && (
+          <div className="streak">
+            <strong className="mono">{stats.currentStreak}</strong>
+            <span>
+              {stats.currentStreak === 1 ? 'day running' : 'days running'}
+              {stats.longestStreak > stats.currentStreak
+                ? ` · best ${stats.longestStreak}`
+                : stats.currentStreak >= 3 && stats.currentStreak === stats.longestStreak
+                  ? ' · your best yet'
+                  : ''}
+            </span>
+            <span className="grow" />
+            <span className="tiny muted mono">~{stats.pages} pages</span>
+          </div>
+        )}
       </div>
     </div>
   );

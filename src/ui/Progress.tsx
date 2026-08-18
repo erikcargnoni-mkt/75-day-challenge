@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { dayStatus, dateForDayIndex, isCleanRun } from '../core/challenge';
 import { PHASE_LABEL, phaseFor } from '../core/cycle';
 import { formatShort, type ISODate } from '../core/date';
-import { bandFitMessage, overview, phaseStats, weightTrend } from '../core/insights';
+import { bandFitMessage, overview, phaseStats, readingStats, weightTrend } from '../core/insights';
 import { getPhoto, listPhotoDates } from '../core/photos';
 import { CHALLENGE_LENGTH } from '../core/types';
 import { useApp } from '../state/useApp';
@@ -42,6 +42,9 @@ export function Progress() {
           </Card>
         </>
       )}
+
+      <h2>Reading</h2>
+      <ReadingSection />
 
       <h2>Weight</h2>
       <WeightSection />
@@ -139,6 +142,38 @@ export function Progress() {
         Today is {formatShort(today)}.
       </p>
     </div>
+  );
+}
+
+function ReadingSection() {
+  const { state, today } = useApp();
+  const stats = readingStats(state, today);
+
+  if (stats.daysRead === 0) {
+    return (
+      <Card>
+        <p className="small muted" style={{ marginBottom: 0 }}>
+          Reading is the one pillar that cannot cost you a day. Tick it on the Today screen and a
+          streak starts here.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <div className="row between">
+        <Stat label="Current streak" value={stats.currentStreak} />
+        <Stat label="Longest streak" value={stats.longestStreak} />
+        <Stat label="Days read" value={stats.daysRead} />
+      </div>
+      <p className="hint" style={{ marginBottom: 0 }}>
+        Roughly <strong className="mono">{stats.pages}</strong> pages at{' '}
+        {state.profile.readingPages} a day
+        {stats.readToday ? '. Today is logged.' : ', and today is still open.'} Nothing here affects
+        your streak — that is the point of it.
+      </p>
+    </Card>
   );
 }
 

@@ -240,6 +240,22 @@ p  { margin: 0 0 10px; }
   border: 1px solid color-mix(in srgb, var(--phase-ovulatory) 30%, transparent);
 }
 
+/* An optional pillar reads as part of the list but visibly not load-bearing. */
+.task.optional { background: color-mix(in srgb, var(--surface-2) 45%, transparent); }
+
+.streak {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+}
+.streak strong { font-size: 16px; color: var(--accent); line-height: 1; }
+
 /* ---------- band chips ---------- */
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }

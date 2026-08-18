@@ -18,9 +18,10 @@ export type TaskId =
   | 'outdoor'
   | 'water'
   | 'nutrition'
-  | 'reading'
+  | 'coldShower'
   | 'meditation'
-  | 'photo';
+  | 'photo'
+  | 'reading';
 
 /** How the 30 outdoor minutes were spent. Both count equally. */
 export type OutdoorMode = 'walk' | 'run';
@@ -83,6 +84,8 @@ export interface DayLog {
   /** Millilitres logged so far. */
   water?: number;
   nutrition?: boolean;
+  coldShower?: boolean;
+  /** Optional pillar: logged and celebrated, never required. See REQUIRED_TASKS. */
   reading?: boolean;
   meditation?: MeditationLog;
   photo?: boolean;

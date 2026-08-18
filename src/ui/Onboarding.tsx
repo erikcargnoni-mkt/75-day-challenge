@@ -97,9 +97,9 @@ export function Onboarding() {
       <Card>
         <p className="small muted" style={{ marginBottom: 0 }}>
           Every day: one 45-minute workout at the prescribed intensity, 30 minutes outdoors walking or
-          running, your water target, your nutrition plan with zero exceptions, 10 pages of non-fiction,
-          a meditation sit, and a progress photo. Weight is logged daily too, but it never affects your
-          streak.
+          running, your water target, your nutrition plan with zero exceptions, a cold shower, a
+          meditation sit, and a progress photo. Reading 10 pages and logging your weight are tracked
+          but optional — neither can ever cost you a day.
         </p>
       </Card>
 

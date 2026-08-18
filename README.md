@@ -23,12 +23,25 @@ whichever she picks is recorded permanently — see [Missed days](#missed-days-h
 | Outdoors | 30 min outside, any weather — walk or run | No |
 | Water | ~35 ml/kg bodyweight, phase-adjusted | **Yes** |
 | Nutrition | Your written plan, no cheat meals, no alcohol | No |
-| Reading | 10 pages non-fiction | No |
+| Cold shower | Finish cold, daily | No |
 | Meditation | One sit — 5, 10, 15 or 20 min | No |
 | Progress photo | Daily | No |
 
+Two pillars are tracked but **never scored**, and neither can cost a day:
+
+| Tracked | Feedback |
+|---|---|
+| Reading — 10 pages non-fiction | A streak: current, longest, days read, pages accumulated |
+| Morning weigh-in | The 7-day trend chart |
+
 Training *below* the prescribed band is allowed, recorded as a downshift, and does **not** break the
 streak. Skipping the workout does.
+
+Reading is optional because it is the one pillar whose value is entirely in the habit rather than the
+compliance — a day that was physically perfect should not be forfeit over ten pages. Removing the
+stick means it needs a carrot, so it keeps its own streak, shown the moment she ticks the box rather
+than buried on another screen. The streak counts up to *yesterday* when today is not logged yet, so
+it never reads as broken every morning before she has picked up a book.
 
 ## Missed days: her call, permanent record
 
@@ -45,6 +58,10 @@ opens the app a **blocking prompt** lists exactly what was missed and offers thr
 A day can be filled in for `BACKFILL_WINDOW_DAYS` (7) after the fact, from the prompt or by tapping
 *Earlier* on the Today screen. **Completing a carried day un-carries it automatically** — carrying is
 meant to record days the work didn't happen, not days the phone didn't hear about it.
+
+When a required task is later *removed* — as reading was — `reconcile()` releases any day that was
+carried only because of it, and stamps `completedAt` so a future rule addition cannot un-sign it.
+Charging her for a rule change she did not make is the same unfairness in a different coat.
 
 The window exists because an unbounded one isn't a log any more, it's a memory test taken at the end;
 a week covers a forgotten evening or a weekend away and stops there. It was a real bug that the first
@@ -99,7 +116,7 @@ test suite first, so a broken rules engine can't ship.
 ```bash
 npm install
 npm run dev      # http://localhost:5173/75-day-challenge/  (base path, see vite.config.ts)
-npm test         # 119 tests over the rules engine, decisions, lock and chart geometry
+npm test         # 136 tests over the rules engine, decisions, lock and chart geometry
 npm run build    # production PWA in dist/
 ```
 
