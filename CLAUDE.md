@@ -22,8 +22,8 @@
 
 - All'inizio di ogni sessione, leggi `MEMORY.md` [[side-hustles/75-day-challenge/MEMORY]].
 - Quando impari qualcosa di nuovo su questo progetto o vieni corretto,
-  aggiorna `MEMORY.md`.
-- Se `MEMORY.md` non esiste, crealo.
+  aggiorna `MEMORY.md` [[side-hustles/75-day-challenge/MEMORY]].
+- Se `MEMORY.md` [[side-hustles/75-day-challenge/MEMORY]] non esiste, crealo.
 - Le task stanno in `tasks.md` [[side-hustles/75-day-challenge/tasks]].
 
 ## Struttura
