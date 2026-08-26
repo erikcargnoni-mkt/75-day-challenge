@@ -2,11 +2,11 @@
 
 ## In corso
 
-- [ ] 
+<!-- - [ ] Descrizione della task ⏫ 📅 2026-08-28 -->
 
 ## Prossime
 
-- [ ] 
+<!-- - [ ] Descrizione della task ⏫ 📅 2026-08-28 -->
 
 ## Fatte
 
