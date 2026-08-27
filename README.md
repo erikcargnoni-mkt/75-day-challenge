@@ -1,3 +1,7 @@
+---
+progetto: "[[75-day-challenge]]"
+---
+
 # 75 — a cycle-aware challenge
 
 A 75-day challenge app built around one rule: **the streak is rigid, the targets are not.**

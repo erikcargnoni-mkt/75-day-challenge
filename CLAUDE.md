@@ -1,3 +1,7 @@
+---
+progetto: "[[75-day-challenge]]"
+---
+
 # CLAUDE.md — 75-day-challenge
 
 ## Cos'è questo progetto

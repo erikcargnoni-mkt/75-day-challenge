@@ -1,3 +1,7 @@
+---
+progetto: "[[75-day-challenge]]"
+---
+
 # MEMORY — 75-day-challenge
 
 > Cosa si impara o si corregge lavorando su questo progetto.
