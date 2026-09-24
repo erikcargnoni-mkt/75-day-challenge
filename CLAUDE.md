@@ -13,7 +13,7 @@ progetto: "[[75-day-challenge]]"
 - **Tipo:** side-hustle
 - **Stato:** **in stand-by dal 2026-09-09.** Non archiviato, non attivo: nessuna task
   aperta e nessun lavoro previsto finché il focus resta sul full-stack marketing "AI
-  augmented" e sull'[[business/ai-agency-project|AI Agency]] — vedi [[MEMORY]] della
+  augmented" e sull'[[ai-agency-project|AI Agency]] — vedi [[MEMORY]] della
   radice.
 - **Avviato:** <!-- YYYY-MM -->
 
